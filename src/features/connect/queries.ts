@@ -95,3 +95,25 @@ export function useEntry(guestId: number | null) {
     enabled: guestId !== null,
   });
 }
+
+/* ----------------------------------------------------------------- planned tabs (DRAFT) */
+
+export function useGuestTrack() {
+  return useQuery({ queryKey: ["connect", "guest-track"], queryFn: ({ signal }) => api.connect.guestTrack(signal) });
+}
+
+export function useJourney(connectId: number | null) {
+  return useQuery({
+    queryKey: ["connect", "journey", connectId],
+    queryFn: ({ signal }) => api.connect.journey(connectId!, signal),
+    enabled: connectId !== null,
+  });
+}
+
+export function useMetrics(period: string | undefined) {
+  return useQuery({
+    queryKey: ["connect", "metrics", period ?? "default"],
+    queryFn: ({ signal }) => api.connect.metrics(period, signal),
+    placeholderData: keepPreviousData,
+  });
+}

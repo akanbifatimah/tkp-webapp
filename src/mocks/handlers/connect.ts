@@ -1,11 +1,11 @@
 import { HttpResponse, http } from "msw";
 import type { SaveLogBody } from "@/features/connect/types";
-import { assign, getEntry, getGuest, getLogs, getQueue, saveLog, type Result } from "../connect-api";
+import { assign, getGuest, getLogs, getQueue, saveLog, type Result } from "../connect-api";
 import { authenticate, fail, latency, path } from "../http";
 import { DEPARTMENTS } from "../seed/guests";
 
 /** HTTP wrappers around the mock Connect server (docs/API.md §3). */
-const send = <T,>(r: Result<T>) => (r.ok ? HttpResponse.json(r.body as object, { status: r.status }) : fail(r.status, r.code, r.message));
+export const send = <T,>(r: Result<T>) => (r.ok ? HttpResponse.json(r.body as object, { status: r.status }) : fail(r.status, r.code, r.message));
 
 export const connectHandlers = [
   http.get(path("/connect/queue"), async ({ request }) => {
@@ -52,10 +52,4 @@ export const connectHandlers = [
     return HttpResponse.json({ departments: DEPARTMENTS });
   }),
 
-  http.get(path("/welcome/guests/:id/entry"), async ({ request, params }) => {
-    await latency();
-    const auth = authenticate(request);
-    if (auth instanceof Response) return auth;
-    return send(getEntry(auth.user, Number(params.id)));
-  }),
 ];

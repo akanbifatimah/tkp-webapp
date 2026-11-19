@@ -65,6 +65,11 @@ export const NAV: NavGroup[] = [
       { label: "Work queue", to: "/connect/queue", permission: "connect.queue.view" },
       { label: "Log follow-up", to: "/connect/log", permission: "connect.log.view" },
       { label: "Scripts", to: "/connect/scripts", permission: "connect.scripts.view" },
+      // PLANNED tabs (TKP Connect UI-C4…C7), drafts awaiting sign-off.
+      { label: "Guest Track", to: "/connect/guest-track", permission: "connect.guestTrack.view" },
+      { label: "Guest journey", to: "/connect/journey", permission: "connect.journey.view" },
+      { label: "Phase board", to: "/connect/board", permission: "connect.phaseBoard.view" },
+      { label: "Team metrics", to: "/connect/metrics", permission: "connect.metrics.view" },
     ],
   },
   { id: "belong", step: 3, label: "Belong", icon: Users, to: "/belong", permission: "belong.view", planned: true },

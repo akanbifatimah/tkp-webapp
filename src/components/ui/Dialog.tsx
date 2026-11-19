@@ -13,6 +13,8 @@ export function Dialog({
   onClose,
   title,
   subtitle,
+  leading,
+  meta,
   children,
   footer,
   className,
@@ -21,6 +23,10 @@ export function Dialog({
   onClose: () => void;
   title: ReactNode;
   subtitle?: ReactNode;
+  /** Shown before the title (e.g. an avatar). */
+  leading?: ReactNode;
+  /** Shown under the title, outside the heading (chips, a meter). */
+  meta?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
@@ -66,7 +72,7 @@ export function Dialog({
   return createPortal(
     <AnimatePresence>
       {open ? (
-        <div className="fixed inset-0 z-90 grid place-items-center p-3 sm:p-6">
+        <div className="fixed inset-0 z-90 grid place-items-center p-3 sm:p-6" data-dialog-root>
           <motion.div
             className="absolute inset-0 bg-ink/55 backdrop-blur-[3px]"
             initial={{ opacity: 0 }}
@@ -90,23 +96,32 @@ export function Dialog({
             )}
           >
             <header className="flex items-start justify-between gap-4 border-b border-line bg-white px-5 py-4 sm:px-6">
-              <div className="min-w-0">
-                <h2 id={titleId} className="font-display text-xl font-semibold text-maroon-900">
-                  {title}
-                </h2>
-                {subtitle ? <div className="mt-0.5 text-sm text-muted">{subtitle}</div> : null}
+              <div className="flex min-w-0 items-start gap-4">
+                {leading}
+                <div className="min-w-0">
+                  {subtitle ? <div className="mb-0.5 text-xs font-extrabold tracking-[0.12em] text-gold-600 uppercase">{subtitle}</div> : null}
+                  <h2 id={titleId} className="font-display text-xl font-semibold text-maroon-900 sm:text-2xl">
+                    {title}
+                  </h2>
+                  {meta}
+                </div>
               </div>
               <button
                 type="button"
                 onClick={onClose}
                 aria-label="Close"
+                data-noprint
                 className="grid size-9 shrink-0 place-items-center rounded-xl text-muted hover:bg-cream-200 hover:text-maroon-700"
               >
                 <X className="size-5" />
               </button>
             </header>
             <div className="scroll-warm flex-1 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
-            {footer ? <footer className="border-t border-line bg-white px-5 py-3 sm:px-6">{footer}</footer> : null}
+            {footer ? (
+              <footer className="border-t border-line bg-white px-5 py-3 sm:px-6" data-noprint>
+                {footer}
+              </footer>
+            ) : null}
           </motion.div>
         </div>
       ) : null}

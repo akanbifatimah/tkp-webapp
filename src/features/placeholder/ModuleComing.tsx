@@ -48,49 +48,6 @@ export function ModuleComing({ spec }: { spec: ComingSpec }) {
   );
 }
 
-const WELCOME_TAGLINE = "“Thanks for worshipping with us.”";
-
-export const COMING: Record<string, ComingSpec> = {
-  welcomeOverview: {
-    eyebrow: "1 · Welcome",
-    title: "Overview",
-    tagline: WELCOME_TAGLINE,
-    milestone: "M3 · Welcome",
-    source: "TKP Connect FI-30 to FI-33",
-    features: [
-      "Date control with Latest, and This service / Month to date / Year to date",
-      "Ten KPI tiles with the change against the prior period",
-      "Cell-group tiles (Red, Yellow, Blue, Green, No cell) with share and change",
-      "Stacked chart by service type; click a month to drill into it",
-    ],
-  },
-  welcomeLookup: {
-    eyebrow: "1 · Welcome",
-    title: "Guest lookup",
-    tagline: WELCOME_TAGLINE,
-    milestone: "M3 · Welcome",
-    source: "TKP Connect FI-34 to FI-36",
-    features: [
-      "Phone and name search: “ruth mensah” and “mensah ruth” both find the guest",
-      "Guest record drawer with legacy notes and ✎ Log follow-up",
-      "View entry pop-up with the form as submitted, Previous / Next and Esc",
-      "Guest PDF export, logged",
-    ],
-  },
-  welcomeLcm: {
-    eyebrow: "1 · Welcome",
-    title: "LCM Metrics",
-    tagline: WELCOME_TAGLINE,
-    milestone: "M4 · LCM",
-    source: "TKP Connect FI-37 to FI-39",
-    features: [
-      "Month picker (default: last full month) and service-type filter",
-      "Every LCM report section, matching the temporary app's numbers",
-      "Map 1: Greater Houston ZIPs with cell tint and emerging-ZIP signals",
-      "Map 2: where visitors came from, US and World",
-    ],
-  },
-};
 
 const later = (step: number, title: string, features: string[]): ComingSpec => ({
   eyebrow: `${step} · ${title}`,

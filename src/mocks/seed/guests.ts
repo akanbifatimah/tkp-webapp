@@ -55,7 +55,20 @@ export const DEPARTMENTS = [
 const FIRST = ["Adaeze", "Michael", "Funmi", "Daniel", "Grace", "Samuel", "Ruth", "Kelechi", "Sarah", "Emeka", "Joy", "David", "Esther", "Tunde", "Priscilla", "James", "Blessing", "Victor", "Hannah", "Chidi", "Naomi", "Joshua", "Ifeoma", "Caleb", "Mercy", "Paul", "Deborah", "Femi", "Abigail", "Isaac", "Zainab", "Peter", "Lois", "Seyi", "Miriam", "Andrew", "Temitope", "Ken", "Lydia", "Oluwaseun"];
 const LAST = ["Adebayo", "Johnson", "Okonkwo", "Williams", "Mensah", "Brown", "Eze", "Davis", "Ogunleye", "Martin", "Nwachukwu", "Taylor", "Bello", "Thomas", "Owusu", "Harris", "Afolabi", "Clark", "Obi", "Lewis", "Ajayi", "Walker", "Danjuma", "Young", "Okafor", "King", "Balogun", "Green", "Uche", "Baker"];
 const AGES = ["16-20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-65", "Above 65"];
-const HOW = ["Invited By Someone", "Social Media", "Google Search", "Drove by", "Other"];
+const HOW = ["Invited By Someone", "Invited By Someone", "Social Media", "Google Search", "Drove by", "YouTube", "Other"];
+const OTHER_ANSWERS = ["Saw the sign on the way to work", "Live stream", "Heard the choir at an event", "Church website"];
+const INVITERS = ["Bola Adeyemi", "Chris Martin", "Funke Ola", "Sam Grant", "Ify Nnaji", "Lola Ayo"];
+
+/** A few guests from outside Greater Houston (LCM Map 2). Points are city centres; abroad has no zip. */
+export const OUT_OF_AREA = [
+  { city: "Dallas", state: "TX", zip: "75201", country: "United States", lat: 32.787, lon: -96.799 },
+  { city: "Austin", state: "TX", zip: "78701", country: "United States", lat: 30.271, lon: -97.742 },
+  { city: "Atlanta", state: "GA", zip: "30303", country: "United States", lat: 33.753, lon: -84.39 },
+  { city: "Chicago", state: "IL", zip: "60601", country: "United States", lat: 41.886, lon: -87.618 },
+  { city: "Lagos", state: null, zip: null, country: "Nigeria", lat: null, lon: null },
+  { city: "London", state: null, zip: null, country: "United Kingdom", lat: null, lon: null },
+  { city: "Accra", state: null, zip: null, country: "Ghana", lat: null, lon: null },
+] as const;
 
 /* ----------------------------------------------------------------- service dates */
 
@@ -84,13 +97,43 @@ function serviceDates(): { date: string; type: string; startUtc: string }[] {
   return out;
 }
 
+type ServiceSlot = { date: string; type: string; startUtc: string; hist?: boolean };
+
+/**
+ * Older services back to January 2025, so year-to-date and same-period-last-year
+ * comparisons have something to compare. Their journeys are finished (Completed or Closed).
+ */
+function historicalDates(): ServiceSlot[] {
+  const out: ServiceSlot[] = [];
+  const recentStart = serviceDates()
+    .map((x) => x.date)
+    .filter((x) => x >= "2026-01-01")
+    .sort()[0]!;
+  const d = new Date("2025-01-05T12:00:00Z");
+  let i = 0;
+  while (d.toISOString().slice(0, 10) < recentStart) {
+    const date = d.toISOString().slice(0, 10);
+    if (date !== "2025-03-09") {
+      out.push({ date, type: "Sunday 1st Service", startUtc: `${date}T15:30:00Z`, hist: true });
+      out.push({ date, type: "Sunday 2nd Service", startUtc: `${date}T17:45:00Z`, hist: true });
+      if (i % 3 === 0) {
+        const tue = new Date(d.getTime() + 2 * 24 * HOUR).toISOString().slice(0, 10);
+        out.push({ date: tue, type: "Tuesday Bible Study", startUtc: `${tue}T00:30:00Z`, hist: true });
+      }
+    }
+    d.setUTCDate(d.getUTCDate() + 7);
+    i++;
+  }
+  return out;
+}
+
 const LATEST_SUNDAY = (() => {
   const d = new Date(`${TODAY}T12:00:00Z`);
   while (d.getUTCDay() !== 0) d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 })();
 
-export const ALL_SERVICE_DATES = [...new Set(serviceDates().map((s) => s.date))].sort().reverse();
+export const ALL_SERVICE_DATES = [...new Set([...serviceDates(), ...historicalDates()].map((s) => s.date))].sort().reverse();
 
 /* ----------------------------------------------------------------- journeys */
 
@@ -135,9 +178,18 @@ export function seedConnect() {
 
   const at = (base: number, hoursLater: number) => new Date(Math.min(base + hoursLater * HOUR, NOW.getTime() - HOUR)).toISOString();
 
-  for (const svc of serviceDates()) {
+  for (const svc of [...serviceDates(), ...historicalDates()] as ServiceSlot[]) {
     const latest = svc.date === LATEST_SUNDAY;
-    const count = latest ? 4 : svc.type === "Tuesday Bible Study" ? 1 + Math.floor(rnd() * 2) : svc.date < "2026-01-01" ? 1 : 2 + Math.floor(rnd() * 3);
+    const hist = !!svc.hist;
+    const count = latest
+      ? 4
+      : hist
+        ? (svc.type === "Tuesday Bible Study" ? 0 : 1) + Math.floor(rnd() * (svc.date >= "2026-01-01" ? 4 : 3))
+        : svc.type === "Tuesday Bible Study"
+          ? 1 + Math.floor(rnd() * 2)
+          : svc.date < "2026-01-01"
+            ? 1
+            : 2 + Math.floor(rnd() * 3);
     const ageDays = (NOW.getTime() - new Date(svc.startUtc).getTime()) / (24 * HOUR);
 
     for (let n = 0; n < count; n++) {
@@ -148,7 +200,8 @@ export function seedConnect() {
         last = pick(LAST);
       }
       usedNames.add(`${first} ${last}`);
-      const zip = chance(0.75) ? pick(Object.keys(CELL_ZIPS)) : pick(OTHER_ZIPS);
+      const away = chance(0.06) ? pick(OUT_OF_AREA) : null;
+      const zip: string | null = away ? away.zip : chance(0.75) ? pick(Object.keys(CELL_ZIPS)) : pick(OTHER_ZIPS);
       const phone = chance(0.95) ? `(${pick(["281", "832", "713"])}) 555-0${100 + Math.floor(rnd() * 99)}` : null;
       const submitted = new Date(new Date(svc.startUtc).getTime() + (60 + rnd() * 90) * 60_000);
       const id = ++guestId;
@@ -168,10 +221,10 @@ export function seedConnect() {
         nationality: pick(["Nigeria", "United States", "Ghana", "Kenya", null]),
         address: `${100 + Math.floor(rnd() * 9800)} ${pick(["Mason", "Fry", "Pin Oak", "Westheimer", "Clay", "Grand Pkwy"])} ${pick(["Rd", "St", "Dr"])}`,
         apt: chance(0.2) ? `${Math.floor(rnd() * 300)}` : null,
-        city: CITY[zip] ?? "Houston",
-        state: "TX",
+        city: away ? away.city : (CITY[zip!] ?? "Houston"),
+        state: away ? away.state : "TX",
         zip,
-        country: "United States",
+        country: away ? away.country : "United States",
         phone,
         email: chance(0.8) ? `${first}.${last}`.toLowerCase() + "@example.com" : null,
         bestTimeToVisit: pick(["Weekday evenings", "Saturday afternoon", null]),
@@ -186,12 +239,12 @@ export function seedConnect() {
         ifYesWhy: null,
         prayerRequest: chance(0.4) ? pick(["Pray for a new job for my husband.", "Healing for my mother.", "Guidance as we settle in Katy."]) : null,
         comments: chance(0.3) ? pick(["The choir was wonderful.", "Very welcoming ushers.", "Loved the message."]) : null,
-        ratings: { Music: 8 + Math.floor(rnd() * 3), Preaching: 9, Comfort: 7 + Math.floor(rnd() * 4), Hospitality: 9, "Church environment": 8, "The people": 9, Parking: chance(0.3) ? null : 6 + Math.floor(rnd() * 5), Traffic: chance(0.5) ? null : 7 },
-        cellGroup: CELL_ZIPS[zip] ?? "N/A",
+        ratings: { Music: 7 + Math.floor(rnd() * 4), Preaching: 8 + Math.floor(rnd() * 3), Comfort: 5 + Math.floor(rnd() * 6), Hospitality: 8 + Math.floor(rnd() * 3), ChurchEnvironment: 7 + Math.floor(rnd() * 4), ThePeople: 8 + Math.floor(rnd() * 3), Traffic: chance(0.5) ? null : 4 + Math.floor(rnd() * 7), Parking: chance(0.3) ? null : 3 + Math.floor(rnd() * 8) },
+        cellGroup: (zip && CELL_ZIPS[zip]) || "N/A",
         visitNumber: 1,
       };
-      if (entry.howHeard === "Invited By Someone") entry.whoInvitedYou = `${pick(FIRST)} ${pick(LAST)}`;
-      if (entry.howHeard === "Other") entry.howHeardOther = "Saw the sign on the way to work";
+      if (entry.howHeard === "Invited By Someone") entry.whoInvitedYou = chance(0.6) ? pick(INVITERS) : `${pick(FIRST)} ${pick(LAST)}`;
+      if (entry.howHeard === "Other") entry.howHeardOther = pick(OTHER_ANSWERS);
 
       // An entry with no phone and no name cannot be followed up (BR-03); every seed guest has a name.
       const r: ConnectRecord = {
@@ -226,6 +279,26 @@ export function seedConnect() {
       };
       const start = new Date(r.clockStartAt).getTime();
 
+      if (hist) {
+        // A finished journey: the teams completed it or closed it.
+        r.coMemberId = pick(CO_POOL);
+        r.itMemberId = pick(IT_POOL);
+        r.coAttempts = 1;
+        r.coLastCallOutcome = "Reached";
+        r.itContacted = true;
+        if (chance(0.55)) {
+          r.status = "Completed";
+          r.phase = 3;
+          r.state.itMembership = "Interested";
+        } else {
+          r.status = "Closed";
+          r.closedReason = pick(["Not interested (Church office)", "Not interested (Integration)", "Moved", "Unreachable", "Other"]);
+          if (r.closedReason === "Not interested (Integration)") r.state.itMembership = "Not Interested";
+        }
+        records.push(r);
+        continue;
+      }
+
       // Assignment: the newest service is only partly assigned.
       if (latest) {
         // The newest service: a fixed spread so every demo person has guests, and a few are still unassigned.
@@ -249,7 +322,8 @@ export function seedConnect() {
           const outcome = method === "Phone Call" ? (last && reached ? "Reached" : "No answer") : "Delivered";
           const wants = last && reached ? pick(["Yes", "Yes", "Undecided", "No"]) : null;
           const next = last && reached ? (wants === "No" && chance(0.5) ? CO_CLOSING_ACTION : "Proceed to Integration Team") : t === 1 ? "No response (retry 2 of 3)" : "No Response (retry 3 of 3)";
-          const savedAt = at(start, 20 + t * 40);
+          // First attempt usually the evening after; retries 2–3 days apart.
+          const savedAt = at(start, (t === 1 ? 6 + Math.floor(rnd() * 60) : 0) + (t - 1) * 60);
           logs.push(logRow(logId++, r, "church_office", author.id, author.fullName, savedAt, {
             method,
             callOutcome: outcome,
@@ -292,7 +366,8 @@ export function seedConnect() {
             const savedAt = at(start, hours);
             r.checklist[key] = { at: savedAt, byId: author.id, by: author.fullName };
             ticked.push(key);
-            hours += p === 1 ? 30 : 90;
+            // Some steps land after their KPI deadline, as in real life.
+            hours += p === 1 ? 14 + Math.floor(rnd() * (keepUp ? 60 : 160)) : 90;
           }
           if (!ticked.length) continue;
           r.itContacted = true;
@@ -352,8 +427,36 @@ export function seedConnect() {
     }
   }
 
-  return { records, logs: logs.sort((a, b) => b.savedAt.localeCompare(a.savedAt)) };
+  // Repeat entries: some people filled in the form again on a later visit (BR-02/03:
+  // same person by phone, no second journey; Welcome counts the visit number).
+  const entries: WelcomeEntry[] = records.map((r) => ({ ...r.entry, connectId: r.connectId, legacyNotes: r.legacyNotes }));
+  const returners = records.filter((r) => r.entry.phone && r.entry.serviceDate >= "2025-06-01").filter(() => chance(0.07));
+  for (const r of returners) {
+    const later = ALL_SERVICE_DATES.filter((d) => d > r.entry.serviceDate && d <= TODAY);
+    if (!later.length) continue;
+    const date = later[Math.floor(rnd() * Math.min(later.length, 6)) + Math.max(0, later.length - 6)] ?? later[0]!;
+    const submitted = new Date(`${date}T17:20:00Z`);
+    if (submitted.getTime() > NOW.getTime()) continue;
+    entries.push({
+      ...r.entry,
+      id: ++guestId,
+      serviceDate: date,
+      serviceType: new Date(`${date}T12:00:00Z`).getUTCDay() === 2 ? "Tuesday Bible Study" : "Sunday 2nd Service",
+      submittedAt: submitted.toISOString(),
+      entriesThatDay: 1,
+      visitNumber: 2,
+      prayerRequest: null,
+      comments: chance(0.5) ? "Glad to be back." : null,
+      connectId: r.connectId,
+      legacyNotes: [],
+    });
+  }
+
+  return { records, logs: logs.sort((a, b) => b.savedAt.localeCompare(a.savedAt)), entries };
 }
+
+/** A welcome-form entry as Welcome sees it (TKP Connect vw_WelcomeGuest), linked to the person's journey. */
+export type WelcomeEntry = GuestEntry & { connectId: number; legacyNotes: { text: string; by: string | null }[] };
 
 function logRow(
   logId: number,

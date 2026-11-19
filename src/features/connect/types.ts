@@ -184,4 +184,65 @@ export type GuestEntry = {
   ratings: Record<string, number | null>;
   cellGroup: string;
   visitNumber: number;
+  membershipIntent?: string | null;
+  /** The person's Connect journey, for ✎ Log follow-up. */
+  connectId?: number | null;
+};
+
+/* ================================================================= planned tabs (M5 · draft) */
+
+/** Guest Track: which of the three Guest Track texts is due (TKP Connect UI-C4, scripts gt-48h / gt-return2 / gt-return3). */
+export type GuestTrackStage = "48h" | "invite2" | "awaiting" | "invite3";
+
+export type GuestTrackRow = {
+  connectId: number;
+  guestId: number;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  serviceDate: string;
+  serviceType: string;
+  clockStartAt: string;
+  daysSince: number;
+  stage: GuestTrackStage;
+  returnVisitDate: string | null;
+  coMemberId: string | null;
+  coName: string | null;
+  itMemberId: string | null;
+  itName: string | null;
+};
+
+export type GuestTrackResponse = { me: { id: string; fullName: string }; seesAll: boolean; rows: GuestTrackRow[] };
+
+/** Guest journey (UI-C5): one guest's whole journey. */
+export type JourneyEvent = { at: string; kind: "form" | "contact" | "tick" | "phase" | "return" | "closed" | "completed"; text: string; by: string | null };
+
+export type JourneyResponse = {
+  me: { id: string; fullName: string };
+  guest: Omit<ConnectGuest, "rowVer" | "returnDates">;
+  visits: { guestId: number; serviceDate: string; serviceType: string; visitNumber: number; submittedAt: string }[];
+  department: string | null;
+  howHeard: string | null;
+  logs: LogRow[];
+  events: JourneyEvent[];
+};
+
+/** Team metrics (UI-C7, doc 01 §8.2): DRAFT definitions, to confirm (TKP Connect Q10–Q12). */
+export type Ratio = { done: number; due: number };
+export type MetricsResponse = {
+  period: { key: string; label: string; start: string; end: string };
+  cohort: number;
+  kpis: { key: string; label: string; deadline: string; ratio: Ratio }[];
+  funnel: { label: string; n: number }[];
+  contact48: Ratio;
+  medianHoursToFirstContact: number | null;
+  priorMedianHoursToFirstContact: number | null;
+  return30: Ratio;
+  cell60: Ratio;
+  integration90: Ratio;
+  completedThisYear: number;
+  lossByStage: { stage: string; closed: number }[];
+  retention: { month: string; guests: number; active: number; completed: number; closed: number }[];
+  integrationByMonth: { month: string; total: number; interested: number; notInterested: number; undecided: number; notYetAsked: number }[];
+  workload: { team: Team; memberId: string; name: string; open: number; overdue: number; contact48: Ratio; logged30: number }[];
 };

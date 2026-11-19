@@ -1,18 +1,34 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Outlet, createBrowserRouter, type RouteObject } from "react-router";
+import { Skeleton } from "@/components/ui/misc";
 import { ChangePasswordPage } from "@/features/account/ChangePasswordPage";
-import { LogPage } from "@/features/connect/LogPage";
-import { QueuePage } from "@/features/connect/QueuePage";
-import { ScriptsPage } from "@/features/connect/ScriptsPage";
 import { useAuth } from "@/features/auth/auth";
 import { SignInPage } from "@/features/auth/SignInPage";
-import { UiKitPage } from "@/features/dev/UiKitPage";
 import { MemberHomePage } from "@/features/member/MemberHomePage";
 import { AccessDenied, NotFound } from "@/features/placeholder/AccessDenied";
-import { COMING, COMING_LATER, ModuleComing } from "@/features/placeholder/ModuleComing";
+import { COMING_LATER, ModuleComing } from "@/features/placeholder/ModuleComing";
 import { env } from "@/lib/env";
 import { landingPath, type Permission } from "@/lib/permissions";
 import { AppShell } from "./AppShell";
 import { CHANGE_PASSWORD_PATH, RequireAuth, RequirePermission } from "./guards";
+
+/**
+ * Module pages load on first visit, so charts and maps only download where
+ * they are used (LCM carries the map library).
+ */
+const OverviewPage = lazy(() => import("@/features/welcome/OverviewPage").then((m) => ({ default: m.OverviewPage })));
+const LookupPage = lazy(() => import("@/features/welcome/LookupPage").then((m) => ({ default: m.LookupPage })));
+const LcmPage = lazy(() => import("@/features/welcome/LcmPage").then((m) => ({ default: m.LcmPage })));
+const QueuePage = lazy(() => import("@/features/connect/QueuePage").then((m) => ({ default: m.QueuePage })));
+const LogPage = lazy(() => import("@/features/connect/LogPage").then((m) => ({ default: m.LogPage })));
+const ScriptsPage = lazy(() => import("@/features/connect/ScriptsPage").then((m) => ({ default: m.ScriptsPage })));
+const GuestTrackPage = lazy(() => import("@/features/connect/GuestTrackPage").then((m) => ({ default: m.GuestTrackPage })));
+const JourneyPage = lazy(() => import("@/features/connect/JourneyPage").then((m) => ({ default: m.JourneyPage })));
+const PhaseBoardPage = lazy(() => import("@/features/connect/PhaseBoardPage").then((m) => ({ default: m.PhaseBoardPage })));
+const MetricsPage = lazy(() => import("@/features/connect/MetricsPage").then((m) => ({ default: m.MetricsPage })));
+const UiKitPage = lazy(() => import("@/features/dev/UiKitPage").then((m) => ({ default: m.UiKitPage })));
+
+const loading = <Skeleton className="mt-6 h-96 w-full rounded-3xl" />;
 
 /** Route names follow TKP Connect's pages so the backend developer and TKP can match them up. */
 
@@ -23,7 +39,7 @@ function Landing() {
 
 const page = (permission: Permission, element: React.ReactNode, kind: "connect" | "generic" = "generic") => (
   <RequirePermission permission={permission} kind={kind}>
-    {element}
+    <Suspense fallback={loading}>{element}</Suspense>
   </RequirePermission>
 );
 
@@ -63,9 +79,9 @@ export const router = createBrowserRouter([
         path: "welcome",
         element: <Outlet />,
         children: [
-          { index: true, element: page("welcome.overview.view", <ModuleComing spec={COMING.welcomeOverview!} />) },
-          { path: "lookup", element: page("welcome.lookup.view", <ModuleComing spec={COMING.welcomeLookup!} />) },
-          { path: "lcm", element: page("welcome.lcm.view", <ModuleComing spec={COMING.welcomeLcm!} />) },
+          { index: true, element: page("welcome.overview.view", <OverviewPage />) },
+          { path: "lookup", element: page("welcome.lookup.view", <LookupPage />) },
+          { path: "lcm", element: page("welcome.lcm.view", <LcmPage />) },
         ],
       },
       {
@@ -76,10 +92,25 @@ export const router = createBrowserRouter([
           { path: "queue", element: page("connect.queue.view", <QueuePage />, "connect") },
           { path: "log/:journeyId?", element: page("connect.log.view", <LogPage />, "connect") },
           { path: "scripts", element: page("connect.scripts.view", <ScriptsPage />, "connect") },
+          { path: "guest-track", element: page("connect.guestTrack.view", <GuestTrackPage />, "connect") },
+          { path: "journey/:connectId?", element: page("connect.journey.view", <JourneyPage />, "connect") },
+          { path: "board", element: page("connect.phaseBoard.view", <PhaseBoardPage />, "connect") },
+          { path: "metrics", element: page("connect.metrics.view", <MetricsPage />, "connect") },
         ],
       },
       ...laterRoutes,
-      ...(env.useMocks ? [{ path: "dev/ui", element: <UiKitPage /> }] : []),
+      ...(env.useMocks
+        ? [
+            {
+              path: "dev/ui",
+              element: (
+                <Suspense fallback={loading}>
+                  <UiKitPage />
+                </Suspense>
+              ),
+            },
+          ]
+        : []),
       { path: "no-access", element: <AccessDenied /> },
       { path: "*", element: <NotFound /> },
     ],

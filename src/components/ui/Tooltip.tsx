@@ -24,9 +24,10 @@ export function Tooltip({
         role="tooltip"
         id={id}
         className={cn(
-          "pointer-events-none absolute left-1/2 z-50 w-max max-w-60 -translate-x-1/2 rounded-lg bg-ink px-2.5 py-1.5 text-center text-xs font-semibold text-cream-50 opacity-0 shadow-lift transition-[opacity,translate] duration-150",
-          "group-hover/tt:opacity-100 group-focus-visible/tt:opacity-100",
-          side === "top" ? "bottom-full mb-2 translate-y-1 group-hover/tt:translate-y-0" : "top-full mt-2 -translate-y-1 group-hover/tt:translate-y-0",
+          // Hidden tooltips take no layout space, so they can't widen the page on phones.
+          "pointer-events-none absolute left-1/2 z-50 hidden w-max max-w-60 -translate-x-1/2 rounded-lg bg-ink px-2.5 py-1.5 text-center text-xs font-semibold text-cream-50 shadow-lift",
+          "group-hover/tt:block group-focus-visible/tt:block",
+          side === "top" ? "bottom-full mb-2" : "top-full mt-2",
         )}
       >
         {label}

@@ -5,11 +5,17 @@ import type {
   Department,
   GuestEntry,
   GuestResponse,
+  GuestTrackResponse,
+  JourneyResponse,
+  MetricsResponse,
   LogsResponse,
   QueueResponse,
   SaveLogBody,
   SaveLogResponse,
 } from "@/features/connect/types";
+import type { FeatureCollection, Geometry } from "geojson";
+import type { LcmResponse } from "@/features/welcome/lcm-types";
+import type { GuestRecord, GuestSearch, GuestSearchResponse, OverviewResponse, Scope } from "@/features/welcome/types";
 import type { Team } from "./permissions";
 import type { Member, PublicSettings } from "./types";
 
@@ -127,7 +133,24 @@ export const newClientRequestId = () => crypto.randomUUID();
 
 export type SignInResponse = { token: string; expiresAt: string; member: Member };
 
+/** Static public files shipped with the front end (not the API). */
+async function staticJson<T>(url: string): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    throw new ApiError(0, "NETWORK", NETWORK_MESSAGE);
+  }
+  if (!res.ok) throw new ApiError(res.status, "NOT_FOUND", "A map file could not be loaded.");
+  return (await res.json()) as T;
+}
+
 export const api = {
+  geo: {
+    /** US state or world country outlines for LCM Map 2 (public data in /geo). */
+    outlines: (name: "us-states" | "world-countries") =>
+      staticJson<FeatureCollection<Geometry, { n: string; lat?: number; lon?: number }>>(`/geo/${name}.json`),
+  },
   auth: {
     signIn: (email: string, password: string) =>
       request<SignInResponse>("/auth/sign-in", { body: { email, password } }),
@@ -152,10 +175,30 @@ export const api = {
     logs: (q: { team?: Team; connectId?: number }, signal?: AbortSignal) =>
       request<LogsResponse>("/connect/logs", { query: q, signal }),
     departments: () => request<{ departments: Department[] }>("/connect/departments"),
+    /** DRAFT · planned tabs (TKP Connect UI-C4, C5, C7). */
+    guestTrack: (signal?: AbortSignal) => request<GuestTrackResponse>("/connect/guest-track", { signal }),
+    journey: (connectId: number, signal?: AbortSignal) => request<JourneyResponse>(`/connect/journey/${connectId}`, { signal }),
+    metrics: (period: string | undefined, signal?: AbortSignal) => request<MetricsResponse>("/connect/metrics", { query: { period }, signal }),
   },
   welcome: {
+    overview: (q: { date?: string; scope?: Scope }, signal?: AbortSignal) =>
+      request<OverviewResponse>("/welcome/overview", { query: q, signal }),
+    search: (q: GuestSearch, signal?: AbortSignal) => request<GuestSearchResponse>("/welcome/guests", { query: q, signal }),
+    guest: (id: number, signal?: AbortSignal) => request<{ guest: GuestRecord }>(`/welcome/guests/${id}`, { signal }),
     /** View entry: the guest's form exactly as submitted (TKP Connect API-W4). */
     entry: (guestId: number, signal?: AbortSignal) =>
       request<{ entry: GuestEntry }>(`/welcome/guests/${guestId}/entry`, { signal }),
+    /** Logs an LCM report export before the browser prints it. */
+    lcmExport: (month: string, type?: string) => request<{ logged: true }>("/welcome/lcm/export", { body: { month, type: type ?? null } }),
+    /** LCM Metrics: the monthly leadership report (TKP Connect API-W5). */
+    lcm: (q: { month?: string; type?: string }, signal?: AbortSignal) => request<LcmResponse>("/welcome/lcm", { query: q, signal }),
+    /** Greater Houston ZIP outlines for LCM Map 1. */
+    zipgeo: (signal?: AbortSignal) =>
+      request<{ features: { zip: string; county: string | null; cellGroup: string | null; lat: number; lon: number; geometry: Geometry }[] }>("/welcome/zipgeo", {
+        query: { all: 1 },
+        signal,
+      }),
+    /** Logs a guest PDF export before the browser prints it (D8). */
+    logExport: (guestId: number) => request<{ logged: true }>(`/welcome/guests/${guestId}/export`, { method: "POST" }),
   },
 };

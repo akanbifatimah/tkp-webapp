@@ -4,7 +4,7 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router";
 import { Logo } from "@/components/ui/Logo";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { useAuth } from "@/features/auth/auth";
+import { useAuth, useConfirmedSignOut } from "@/features/auth/auth";
 import { cn } from "@/lib/cn";
 import { env } from "@/lib/env";
 import { visibleNav, type NavGroup } from "@/lib/nav";
@@ -233,7 +233,8 @@ export function Sidebar({
 }
 
 function UserCard({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
-  const { member, activeRole, setActiveRole, signOut } = useAuth();
+  const { member, activeRole, setActiveRole } = useAuth();
+  const signOut = useConfirmedSignOut();
   if (!member || !activeRole) return null;
   const initials = member.fullName
     .split(/\s+/)

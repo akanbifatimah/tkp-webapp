@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, setUnauthorizedHandler, type SignInResponse } from "@/lib/api";
 import { permissionsFor, type Permission, type Role } from "@/lib/permissions";
@@ -153,6 +154,20 @@ export function useAuth() {
   const ctx = use(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
+}
+
+/** Sign out, after a confirmation (dangerous actions always ask first). */
+export function useConfirmedSignOut() {
+  const { signOut } = useAuth();
+  const confirm = useConfirm();
+  return async () => {
+    const ok = await confirm({
+      title: "Sign out of TKP Hub?",
+      body: "You will need your email and password to sign back in. Anything you have not saved on this page will be lost.",
+      confirmLabel: "Sign out",
+    });
+    if (ok) await signOut();
+  };
 }
 
 /** Only same-site paths may be returned to after sign-in (UI-G6). */

@@ -1,5 +1,5 @@
 import type { LogRow } from "@/features/connect/types";
-import { seedConnect, type ConnectRecord } from "./seed/guests";
+import { seedConnect, type ConnectRecord, type WelcomeEntry } from "./seed/guests";
 import { STAFF, type StaffRecord } from "./seed/staff";
 
 /**
@@ -22,6 +22,8 @@ export const db = {
   connect: seeded.records as ConnectRecord[],
   /** Saved logs, newest first (itg.ConnectLog). */
   connectLogs: seeded.logs as LogRow[],
+  /** Every welcome-form entry (TKP Connect vw_WelcomeGuest), one per person per service date (BR-02). */
+  entries: seeded.entries as WelcomeEntry[],
 };
 
 /** Every sign-in, search, guest view, assignment and save is audited (FI-09). */

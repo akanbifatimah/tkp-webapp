@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ConfidentialChip, EmptyState, ErrorBanner, PageHeader, Skeleton } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/Toast";
 import { ViewEntryDialog } from "@/features/welcome/ViewEntryDialog";
@@ -14,6 +15,7 @@ import { formatStamp, serviceDateLong, serviceDateShort, serviceWeekday } from "
 import { LogsTable } from "./LogsTable";
 import {
   CONNECT_TAGLINE,
+  CO_CLOSING_ACTION,
   IT_MULTI,
   IT_SINGLE,
   NEXT_ACTIONS,
@@ -164,6 +166,7 @@ function LogForm({
   const toast = useToast();
   const navigate = useNavigate();
   const save = useSaveLog();
+  const confirm = useConfirm();
   const departments = useDepartments();
   const [f, setF] = useState<FormState>(() => startForm(d, carriedNote));
   const [error, setError] = useState<ApiError | null>(null);
@@ -178,7 +181,7 @@ function LogForm({
   const assignee = co ? g.coName : g.itName;
   const tokens = { Name: g.firstName, "Your Name": d.me.fullName, Day: serviceWeekday(g.serviceDate) };
 
-  const onSave = () => {
+  const onSave = async () => {
     setError(null);
     if (!f.method) return toast.show("Choose how you reached out.", { tone: "crit" });
     if (!co && !notInt && f.returned && !f.returnDate) return toast.show("Choose the return visit date.", { tone: "crit" });
@@ -218,6 +221,25 @@ function LogForm({
       body.multi = f.multi;
       body.returned2ndVisit = f.returned;
       body.returnVisitDate = f.returned ? f.returnDate : null;
+    }
+
+    // Saves that end a journey for good ask first (BR-11 closes it; P3 Complete completes it).
+    const guestName = `${g.firstName} ${g.lastName}`;
+    if ((co && f.next === CO_CLOSING_ACTION) || notInt) {
+      const ok = await confirm({
+        title: `Close ${guestName}’s journey?`,
+        body: `${co ? "“Not Interested in Becoming a Member”" : "Membership “Not Interested”"} closes the journey. ${g.firstName} leaves the Work queue and nobody can log a follow-up for them again. Reopening a journey is not available yet.`,
+        confirmLabel: "Save and close journey",
+      });
+      if (!ok) return;
+    } else if (!co && f.checks.P3Complete && !f.start.P3Complete) {
+      const ok = await confirm({
+        title: `Complete ${guestName}’s 12-week journey?`,
+        body: `Ticking “Phase 3 Complete” marks the journey Completed. ${g.firstName} leaves the Work queue and no more logs can be saved for them.`,
+        confirmLabel: "Save and complete",
+        destructive: false,
+      });
+      if (!ok) return;
     }
 
     save.mutate(body, {
@@ -340,7 +362,7 @@ function LogForm({
               <Lock className="size-4" aria-hidden /> View only
             </span>
           ) : (
-            <Button variant="gold" size="lg" loading={save.isPending} onClick={onSave} icon={<Save className="size-4.5" />} className="min-w-40">
+            <Button variant="gold" size="lg" loading={save.isPending} onClick={() => void onSave()} icon={<Save className="size-4.5" />} className="min-w-40">
               {save.isPending ? "Saving…" : "Save log"}
             </Button>
           )}

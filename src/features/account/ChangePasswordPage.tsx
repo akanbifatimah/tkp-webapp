@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
-import { useAuth } from "@/features/auth/auth";
+import { useAuth, useConfirmedSignOut } from "@/features/auth/auth";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { EASE_OUT } from "@/lib/motion";
@@ -18,7 +18,8 @@ import { landingPath } from "@/lib/permissions";
  * (API-A6) and the person signs in again with the new password.
  */
 export function ChangePasswordPage() {
-  const { member, activeRole, signOut, endSession } = useAuth();
+  const { member, activeRole, endSession } = useAuth();
+  const signOut = useConfirmedSignOut();
   const forced = !!member?.mustChangePassword;
 
   const [current, setCurrent] = useState("");

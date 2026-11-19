@@ -272,11 +272,201 @@ Each log has: `logId`, `connectId`, `team`, `authorId`, `author`, `savedAt`, `gu
 
 200: `{ "departments": [{ "id": 1, "name": "Choir / Music Ministry" }] }`. The mock uses the departments named in script A.3.1 until the church sends its list (TKP Connect Q14).
 
-### `GET /welcome/guests/{guestId}/entry` (API-W4 · View entry)
+---
+
+## 4. Welcome
+
+Follows TKP Connect API-W1…W4. The mock server is `src/mocks/welcome-api.ts`, with its tests in `src/mocks/welcome-api.test.ts` (FI-30…FI-36).
+
+**Counting rules** (TKP Connect doc 01 §5 and §8.1, owned by the Integration Team; dashboards must not recompute them another way):
+- One entry per person per service date; if they submitted twice, the latest counts (BR-02).
+- **Membership intent** is "Would you like to become a member?", or else "Will you give a thought…". *Maybe* counts as *Undecided*.
+- **Young adults** are 16–35; **Adults** are 36 and over.
+- **Referral** means "Invited By Someone".
+- **Not on cell map** means the ZIP isn't on the cell list (blank ZIPs included).
+- **Average rating** is the mean of each guest's answered ratings. A blank rating is "no answer", never 0 (BR-23).
+
+### `GET /welcome/overview?date=&scope=` (API-W1)
+
+`date` defaults to the latest service date. `scope` is `service`, `mtd` or `ytd`.
+
+```json
+{
+  "meta": { "date": "2026-11-15", "scope": "service", "currentStart": "2026-11-15", "currentEnd": "2026-11-15", "priorStart": "2026-11-08", "priorEnd": "2026-11-08" },
+  "kpis": {
+    "current": { "guests": 9, "female": 4, "male": 5, "youngAdults": 3, "adults": 6, "membershipYes": 1, "membershipUndecided": 3,
+                 "willComeAgainYes": 5, "referrals": 2, "notOnCellMap": 3, "repeatGuests": 0, "avgRating": 8.0 },
+    "prior": { "…": "same keys" }
+  },
+  "cells": { "current": { "Red": 2, "Yellow": 2, "Blue": 1, "Green": 1, "N/A": 3 }, "prior": { "…": "same keys" } },
+  "chart": [{ "date": "2026-11-15", "type": "Sunday 1st Service", "guests": 4 }],
+  "dates": ["2026-11-15", "2026-11-10", "2026-11-08"]
+}
+```
+
+**Prior period:**
+- `service`: the previous service date on the same weekday (`null` if there is none).
+- `mtd` / `ytd`: the same span last year.
+
+**Chart:**
+- `service`: the last 16 service dates up to `date`.
+- `mtd`: this month's service dates.
+- `ytd`: one row per month and service type, with `date` = the 1st of the month.
+
+### `GET /welcome/guests?phone=&name=&date=&cell=&type=&member=` (API-W2)
+
+At least one parameter is required.
+
+| Parameter | Meaning |
+|---|---|
+| `phone` | Digits only; matches any part of the number. At least 3 digits |
+| `name` | Every word must match the start of the first or last name, so "ruth mensah" and "mensah ruth" both work |
+| `date` | Service date |
+| `cell` | `Red` · `Yellow` · `Blue` · `Green` · `None` |
+| `type` | Service type |
+| `member` | `Yes` · `Undecided` · `No` |
+
+200: `{ items, total, truncated }`, newest first, capped at 1,000. Each item has: `id`, `serviceDate`, `serviceType`, `firstName`, `lastName`, `phone`, `gender`, `ageBracket`, `city`, `zip`, `cellGroup`, `howHeard`, `membershipIntent`, `visitNumber`, `connectId`. Audited as `welcome.search`.
+
+| Status | `code` | Message |
+|---|---|---|
+| 400 | `VALIDATION_FAILED` | Type a phone number or a name, or pick a filter. |
+| 400 | `VALIDATION_FAILED` | Type at least 3 digits of the phone number. |
+
+### `GET /welcome/guests/{id}` (API-W3 · the guest record drawer)
+
+200: `{ guest }`. That is the item above, plus `middleName`, `email`, `address`, `apt`, `state`, `maritalStatus`, `ageGroup`, `howHeardOther`, `invitedBy`, `invitingCellGroup`, `willComeAgain`, `bestTimeToVisit`, `comments`, `ratings`, `followUpNotes[{ by, text }]` (legacy, read-only) and `entriesWithPhone`.
+
+**Never includes the prayer request** (BR-30). Audited as `welcome.view`.
+
+### `GET /welcome/guests/{id}/entry` (API-W4 · View entry)
 
 For roles that may use Guest lookup. 200: `{ entry }`, the welcome form exactly as submitted, with blanks as `null`.
 
-- The `entry` fields are listed in `src/features/connect/types.ts` → `GuestEntry`.
+- The `entry` fields are listed in `src/features/connect/types.ts` → `GuestEntry`. The response also has `membershipIntent` and `connectId`.
+- **Ratings** use the keys `Music`, `Preaching`, `Comfort`, `Hospitality`, `ChurchEnvironment`, `ThePeople`, `Traffic` and `Parking`, each 0–10 or `null`.
 - This is the **only** response that carries `prayerRequest`.
 - If the person submitted twice that day, the latest entry is returned and `entriesThatDay` says how many there were.
+- It never returns follow-up, author, IP or geolocation columns.
 - Audited as `welcome.entry.view`.
+
+### `POST /welcome/guests/{id}/export` (D8 · guest PDF export)
+
+**New; not in TKP Connect,** where the button is disabled. The front end calls this **before** it prints the View entry pop-up, so every export is logged.
+
+200: `{ "logged": true }`. Audited as `welcome.entry.export`.
+
+| Status | `code` | Message |
+|---|---|---|
+| 403 | `FORBIDDEN` | Your role cannot export guest records. |
+| 404 | `NOT_FOUND` | Guest not found. |
+
+Which roles may export is still to be confirmed with the product owner. Until then: Tech Admin, Lead Pastor, Church Admin, Church Office Admin, Integration Admin and Welcome Lead.
+
+---
+
+## 5. LCM Metrics
+
+Follows TKP Connect API-W5 (`itg.usp_WelcomeLcmMetrics`). This is the monthly Leadership Council Meeting report. It has **totals only**: no guest names or phones; the only names are inviters. For roles with LCM access (doc 02). The mock is `src/mocks/lcm-api.ts`, with its tests in `src/mocks/lcm-api.test.ts`.
+
+### `GET /welcome/lcm?month=YYYY-MM&type=`
+
+- `month` defaults to the **last full month** in church time.
+- A month still in progress has `asOf` = today and is compared with the **same number of days** of the previous month.
+- `type` filters by service type.
+
+| Field | Content |
+|---|---|
+| `meta` | `{ month, priorMonth, year, asOf, inProgress, serviceType }` |
+| `periods[]` | `Month over month`, `Year to date`, `Week over week` (7 days to `asOf` vs the 7 before) and `Year over year (month)`. Each is `{ comparison, currentStart, currentEnd, priorStart, priorEnd, current, prior, change, pctChange }`; `pctChange` is `null` when prior = 0 ("new") |
+| `kpis` | `{ current, prior }` for the month and the prior month (same keys as Overview) |
+| `monthly[]` | `{ year, month, guests }`, January to `month`, for this year and last year |
+| `weekly[]` | `{ weekStart, weekEnd, guests }`, the 12 weeks ending `asOf` |
+| `breakdowns` | For each of `Gender`, `AgeGroup`, `AgeBracket`, `MaritalStatus`, `ServiceType`, `City`, `CellGroup`, `HowHeard`, `MembershipIntent`, `WillComeAgain`, `Zip5`: `[{ value, month, priorMonth, ytd, priorYtd }]`. Blanks are `"Not given"` |
+| `emergingZips[]` | Map 1: every Greater Houston ZIP with guests this year, cell ZIPs included: `{ zip, city, county, cellGroup ("N/A" if not a cell ZIP), isEmerging, hasOutline, lat, lon, ytd, priorYtd, last90, prior90, firstSeen, lastSeen, signal }` |
+| `ratings[]` | `{ dimension, sort, month, prior, twelveMonth, monthLow }` for Music, Preaching, Comfort, Hospitality, Church environment, The people, Parking and Traffic. `monthLow` = how many rated it 0–5 |
+| `ratingTrend[]` | `{ dimension, month: "YYYY-MM", avg, count }` over 12 months |
+| `topInviters[]` | `{ name, guests }`, year to date, from "Who invited you" on referral rows |
+| `howByMonth[]` | `{ month: "YYYY-MM", source, guests }` over 12 months |
+| `serviceByDate[]` | `{ date, type, guests }` for the month's service dates |
+| `otherAnswers[]` | `{ text, guests }`: the month's "Other" answers in the guests' own words |
+| `visitorCities[]` | Map 2: `{ city, state, country, guests, lat, lon, zips[] }`. `lat`/`lon` are `null` without a US ZIP; the page places those guests on their country |
+
+**Emerging ZIPs (BR-21).** An emerging ZIP is in Greater Houston (the 9-county metro plus every cell ZIP) but not on the cell list. It gets one signal:
+- **Emerging**: YTD ≥ 10 and ≥ 3× the same period last year.
+- **Growing**: the last 90 days beat the previous 90.
+- **Watch**: otherwise.
+
+`signal` is `null` for cell ZIPs.
+
+Audited as `welcome.lcm.view`.
+
+### `GET /welcome/zipgeo?all=1`
+
+The Greater Houston ZIP outlines for Map 1: `{ features: [{ zip, state, county, cellGroup, lat, lon, geometry }], missing: [] }`. These are public U.S. Census ZCTA outlines (TKP Connect `itg.ZipGeo`).
+
+The US state and world country outlines for Map 2 are static public files the front end ships in `public/geo/` (licences in `public/geo/README.md`). They need no API.
+
+### `POST /welcome/lcm/export` (LCM export)
+
+**New; not in TKP Connect,** where the button is disabled (FI-40). Turned on on 2026-11-19. The front end calls this **before** it prints the report, so every export is logged. The report has totals only, so everyone who can open LCM Metrics may export it.
+
+Request: `{ "month": "2026-10", "type": null }`. 200: `{ "logged": true }`. Audited as `welcome.lcm.export`. 403 `FORBIDDEN` for roles without LCM access.
+
+---
+
+## 6. Planned Connect tabs (DRAFT)
+
+TKP Connect lists four Connect tabs as **PLANNED** (doc 05 UI-C4…C7). Their designs and metric definitions are still open on TKP's side (doc 09 Q10–Q13). These endpoints are drafts built from what the repo agrees so far; each page says so. The mock server is `src/mocks/connect-plans.ts`, with its tests in `src/mocks/connect-plans.test.ts`.
+
+**Phase board** needs no new endpoint. It uses `GET /connect/queue?team=&date=all` and groups the rows by `phase`. It is read-only: phases move only with the *Phase n Complete* ticks (BR-12).
+
+### `GET /connect/guest-track` (UI-C4)
+
+Shows guests before or between visits, with the Guest Track text that is due. The three texts are TKP's script library keys `gt-48h`, `gt-return2` and `gt-return3`.
+
+200: `{ me, seesAll, rows[] }`. Each row has: `connectId`, `guestId`, `firstName`, `lastName`, `phone`, `serviceDate`, `serviceType`, `clockStartAt`, `daysSince`, `stage`, `returnVisitDate`, `coMemberId`, `coName`, `itMemberId`, `itName`.
+
+Whole-team viewers see every Active guest; everyone else sees guests assigned to them in either team.
+
+| `stage` | Rule (DRAFT, from each script's "when" note) |
+|---|---|
+| `48h` | Within 48 hours of the form, no return yet |
+| `invite2` | Days 3–6 after the first visit, no return yet |
+| `awaiting` | Days 7–27, no second visit confirmed |
+| `invite3` | Up to 3 days after a confirmed return visit |
+
+**Open:** who sends each text, and whether "sent" should be recorded.
+
+### `GET /connect/journey/{connectId}` (UI-C5)
+
+One guest's whole journey. Open to Connect roles, and to the Welcome Lead and Welcome Team as **view only** (doc 02 matrix). Audited as `connect.journey.view`.
+
+200: `{ me, guest, visits[], department, howHeard, logs[], events[] }`.
+- `guest`: the API-C3 guest fields.
+- `visits[]`: every welcome-form entry of this person.
+- `logs[]`: both teams, newest first.
+- `events[]`: `{ at, kind, text, by }`, newest first. `kind` is one of `form`, `contact` (first contact, with hours after the form), `tick`, `phase` (Moved to Phase 2/3), `return`, `closed` and `completed`.
+
+**Not available without new data:** a full assignment history. TKP Connect stores only the current assignee.
+
+### `GET /connect/metrics?period=YYYY-MM|ytd` (UI-C7)
+
+The cohort is the guests whose first visit falls in the period (the default is the last full month).
+
+A ratio `{ done, due }` counts a guest as **due** once the metric's window has ended, and **done** if it happened within the window.
+
+| Field | DRAFT definition (doc 01 §8.2) |
+|---|---|
+| `kpis[]` | Phase 1 checklist ticked by Q10's proposed deadlines: 48 Hr Welcome within 48 h of the form; Initial Welcome Call by day 3; Culture, Relationship and Phase 1 Complete by the end of week 2 |
+| `funnel[]` | How many in the cohort have each Phase 1 step ticked at all |
+| `contact48` · `medianHoursToFirstContact` | First saved log (either team) within 48 h of the form; the median hours to it (and the prior period's) |
+| `return30` | *Returned for 2nd visit* with a return date within 30 days of the first visit |
+| `cell60` | Life Group Outcome "Joined Cell Group" logged within 60 days |
+| `integration90` | Membership Outcome "Interested" logged within 90 days |
+| `lossByStage[]` | Closed journeys in the cohort: by the Church Office call, or by the phase they were in |
+| `retention[]` | The last 6 first-visit months: guests, Active, Completed, Closed |
+| `integrationByMonth[]` | **Live (FI-70):** by service month: total, Interested, Not interested (Integration, or Church Office "Not Interested in Becoming a Member"), Undecided, not yet asked |
+| `workload[]` | For each member of the teams the caller can open: open guests; overdue (Integration = 48 h overdue, Church Office = not yet contacted); 48-hour rate over the last 90 days (Church Office = first contact; Integration = the 48 Hr Welcome tick); logs in the last 30 days |
+
+**Who may see it (Q12, open):** every Connect role, as the doc 02 matrix shows until it is answered. Audited as `connect.metrics.view`.

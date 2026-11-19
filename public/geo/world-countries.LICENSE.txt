@@ -1,0 +1,10 @@
+world-countries.min.json — country outlines for LCM Map 2 (TKP Connect 0.3.0).
+
+Built from world-atlas 2.0.2 (countries-110m.json), converted to GeoJSON with topojson-client 3,
+coordinates rounded to 0.01°, Antarctica removed, rings crossing 180° shifted east (Russia, Fiji), and a label point (lat, lon) added per country.
+
+world-atlas — Copyright 2013-2019 Michael Bostock, ISC License:
+  Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby
+  granted, provided that the above copyright notice and this permission notice appear in all copies.
+  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE.
+Underlying data: Natural Earth (naturalearthdata.com), public domain.

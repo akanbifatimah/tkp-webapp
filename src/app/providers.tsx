@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/features/auth/auth";
 import { ApiError } from "@/lib/api";
@@ -21,7 +22,9 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <MotionConfig reducedMotion="user">
         <ToastProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <ConfirmProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </ConfirmProvider>
         </ToastProvider>
       </MotionConfig>
     </QueryClientProvider>

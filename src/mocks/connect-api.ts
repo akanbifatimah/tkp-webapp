@@ -351,16 +351,6 @@ export function getLogs(u: StaffRecord, q: { team: string | null; connectId: num
   return ok({ team, all, logs });
 }
 
-/* ----------------------------------------------------------------- View entry (API-W4) */
-
-export function getEntry(u: StaffRecord, guestId: number) {
-  if (!u.roles.some((r) => can(r, "welcome.lookup.view"))) return no(403, "FORBIDDEN", "You don't have access to guest details.");
-  const r = db.connect.find((x) => x.guestId === guestId);
-  if (!r) return no(404, "NOT_FOUND", "Guest not found.");
-  audit(u.id, "welcome.entry.view", String(guestId));
-  return ok({ entry: r.entry });
-}
-
 /** Labels for the checklist keys of a phase (used by tests). */
 export const phaseKeys = (p: 1 | 2 | 3) => STEPS[p].map((s) => s.key as StepKey);
 export { stepLabel };
