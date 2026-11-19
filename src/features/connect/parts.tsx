@@ -93,12 +93,15 @@ export function ContactActions({
   logHref,
   viewOnlyLog,
   size = "md",
+  iconOnly = false,
 }: {
   phone: string | null;
   mine: boolean;
   logHref: string;
   viewOnlyLog: boolean;
   size?: "sm" | "md";
+  /** Call / Text / WhatsApp as icons (labels stay for screen readers and in tooltips). */
+  iconOnly?: boolean;
 }) {
   const d = phoneDigits(phone);
   const base = cn(
@@ -111,21 +114,21 @@ export function ContactActions({
 
   const action = (label: string, icon: ReactNode, href: string | null, external?: boolean) =>
     mine && href ? (
-      <a href={href} className={cn(base, on)} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+      <a href={href} title={iconOnly ? label : undefined} className={cn(base, on, iconOnly && "w-8 px-0")} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
         {icon}
-        <span className="max-sm:sr-only">{label}</span>
+        <span className={iconOnly ? "sr-only" : "max-sm:sr-only"}>{label}</span>
       </a>
     ) : (
       <Tooltip label={!mine ? offReason : "No phone number"}>
-        <span className={cn(base, off)} aria-disabled="true">
+        <span className={cn(base, off, iconOnly && "w-8 px-0")} aria-disabled="true">
           {icon}
-          <span className="max-sm:sr-only">{label}</span>
+          <span className={iconOnly ? "sr-only" : "max-sm:sr-only"}>{label}</span>
         </span>
       </Tooltip>
     );
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className={cn("flex items-center gap-1.5", !iconOnly && "flex-wrap")}>
       {action("Call", <Phone className="size-3.5" aria-hidden />, d ? `tel:${d}` : null)}
       {action("Text", <MessageSquareText className="size-3.5" aria-hidden />, d ? `sms:${d}` : null)}
       {action("WhatsApp", <MessageCircle className="size-3.5" aria-hidden />, d ? `https://wa.me/${waNumber(phone)}` : null, true)}

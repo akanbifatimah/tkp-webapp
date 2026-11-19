@@ -81,7 +81,7 @@ export function scriptLines(body: string, tokens: Partial<ScriptTokens> = {}): S
       if (m.index > last) pieces.push({ text: line.slice(last, m.index) });
       const key = m[1];
       const value = key ? values[key] : undefined;
-      pieces.push(value ? { text: value, token: "filled" } : { text: key ?? m[0], token: "open" });
+      pieces.push(value ? { text: value, token: "filled" } : { text: m[0], token: "open" });
       last = m.index + m[0].length;
     }
     if (last < line.length) pieces.push({ text: line.slice(last) });

@@ -21,6 +21,7 @@ import type { LogRow } from "./types";
 export function LogsTable({ team }: { team?: Team }) {
   const logs = useLogs(team);
   const [who, setWho] = useState("all");
+  const [limit, setLimit] = useState(PAGE);
   const d = logs.data;
 
   const authors = useMemo(() => {
@@ -42,7 +43,8 @@ export function LogsTable({ team }: { team?: Team }) {
   if (!d) return null;
 
   const co = d.team === "church_office";
-  const rows = d.logs.filter((l) => who === "all" || l.authorId === who);
+  const matching = d.logs.filter((l) => who === "all" || l.authorId === who);
+  const rows = matching.slice(0, limit);
 
   return (
     <motion.section variants={fadeUp} initial="hidden" animate="show" className="@container rounded-3xl border border-white bg-white shadow-card">
@@ -62,7 +64,10 @@ export function LogsTable({ team }: { team?: Team }) {
               <button
                 key={id}
                 type="button"
-                onClick={() => setWho(id)}
+                onClick={() => {
+                  setWho(id);
+                  setLimit(PAGE);
+                }}
                 aria-pressed={who === id}
                 className={cn(
                   "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition-colors",
@@ -167,9 +172,22 @@ export function LogsTable({ team }: { team?: Team }) {
           </ul>
         </>
       )}
+      {matching.length > rows.length ? (
+        <div className="border-t border-line px-5 py-3 text-center">
+          <button
+            type="button"
+            onClick={() => setLimit((n) => n + PAGE)}
+            className="inline-flex h-9 items-center rounded-xl border border-line bg-white px-4 text-sm font-bold text-ink hover:border-maroon-200 hover:bg-cream-50"
+          >
+            Show more · {matching.length - rows.length} older
+          </button>
+        </div>
+      ) : null}
     </motion.section>
   );
 }
+
+const PAGE = 15;
 
 function GuestLink({ log }: { log: LogRow }) {
   return (

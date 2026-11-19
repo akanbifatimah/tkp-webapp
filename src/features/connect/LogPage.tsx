@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, Eye, Lock, NotebookPen, RotateCcw, Save } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { ConfidentialChip, EmptyState, ErrorBanner, PageHeader, Skeleton } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/Toast";
@@ -44,6 +44,7 @@ import type { GuestResponse, SaveLogBody } from "./types";
 export function LogPage() {
   const { journeyId } = useParams();
   const [params, setParams] = useSearchParams();
+  const { pathname } = useLocation();
   const id = journeyId ? Number(journeyId) : null;
   const team = (params.get("team") as Team | null) ?? undefined;
   const guest = useGuest(id, team);
@@ -52,8 +53,10 @@ export function LogPage() {
   const [carriedNote, setCarriedNote] = useState<string | null>(null);
 
   useEffect(() => {
-    if (d && params.get("team") !== d.team) setParams({ team: d.team }, { replace: true });
-  }, [d, params, setParams]);
+    // Only while this page owns the address (not while it animates out).
+    if (!d || pathname !== `/connect/log/${d.guest.connectId}`) return;
+    if (params.get("team") !== d.team) setParams({ team: d.team }, { replace: true });
+  }, [d, params, setParams, pathname]);
 
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">

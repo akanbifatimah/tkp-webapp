@@ -1,7 +1,7 @@
 import { AlarmClock, CalendarDays, CheckCircle2, CircleDashed, UserPlus, UserX, Users } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { Chip } from "@/components/ui/Chip";
 import { ConfidentialChip, EmptyState, ErrorBanner, PageHeader, Skeleton } from "@/components/ui/misc";
 import { Tile } from "@/components/ui/Tile";
@@ -23,6 +23,7 @@ export const logHref = (connectId: number, team: Team) => `/connect/log/${connec
 
 export function QueuePage() {
   const [params, setParams] = useSearchParams();
+  const { pathname } = useLocation();
   const team = (params.get("team") as Team | null) ?? undefined;
   const date = params.get("date") ?? undefined;
   const queue = useQueue(team, date);
@@ -31,11 +32,12 @@ export function QueuePage() {
 
   // Keep the address in step with what the server chose (latest date, default team).
   useEffect(() => {
-    if (!d) return;
+    // Only while this page owns the address (not while it animates out).
+    if (!d || pathname !== "/connect/queue") return;
     if (params.get("team") !== d.team || params.get("date") !== d.date) {
       setParams({ team: d.team, date: d.date }, { replace: true });
     }
-  }, [d, params, setParams]);
+  }, [d, params, setParams, pathname]);
 
   useEffect(() => setWho("all"), [team, date]);
 
@@ -349,6 +351,7 @@ function AssignList({ data: d, rows, dateLbl }: { data: QueueResponse; rows: Que
                     <div className="flex justify-end">
                       <ContactActions
                         size="sm"
+                        iconOnly
                         phone={r.phone}
                         mine={r[co ? "coMemberId" : "itMemberId"] === d.me.id}
                         logHref={logHref(r.connectId, d.team)}
