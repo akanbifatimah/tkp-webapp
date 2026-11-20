@@ -8,6 +8,7 @@ import { MemberHomePage } from "@/features/member/MemberHomePage";
 import { AccessDenied, NotFound } from "@/features/placeholder/AccessDenied";
 import { COMING_LATER, ModuleComing } from "@/features/placeholder/ModuleComing";
 import { env } from "@/lib/env";
+import { visibleNav } from "@/lib/nav";
 import { landingPath, type Permission } from "@/lib/permissions";
 import { AppShell } from "./AppShell";
 import { CHANGE_PASSWORD_PATH, RequireAuth, RequirePermission } from "./guards";
@@ -26,6 +27,11 @@ const GuestTrackPage = lazy(() => import("@/features/connect/GuestTrackPage").th
 const JourneyPage = lazy(() => import("@/features/connect/JourneyPage").then((m) => ({ default: m.JourneyPage })));
 const PhaseBoardPage = lazy(() => import("@/features/connect/PhaseBoardPage").then((m) => ({ default: m.PhaseBoardPage })));
 const MetricsPage = lazy(() => import("@/features/connect/MetricsPage").then((m) => ({ default: m.MetricsPage })));
+const DashboardPage = lazy(() => import("@/features/admin/DashboardPage").then((m) => ({ default: m.DashboardPage })));
+const UsersPage = lazy(() => import("@/features/admin/UsersPage").then((m) => ({ default: m.UsersPage })));
+const RolesPage = lazy(() => import("@/features/admin/RolesPage").then((m) => ({ default: m.RolesPage })));
+const AuditPage = lazy(() => import("@/features/admin/AuditPage").then((m) => ({ default: m.AuditPage })));
+const SettingsPage = lazy(() => import("@/features/admin/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const UiKitPage = lazy(() => import("@/features/dev/UiKitPage").then((m) => ({ default: m.UiKitPage })));
 
 const loading = <Skeleton className="mt-6 h-96 w-full rounded-3xl" />;
@@ -35,6 +41,13 @@ const loading = <Skeleton className="mt-6 h-96 w-full rounded-3xl" />;
 function Landing() {
   const { activeRole } = useAuth();
   return <Navigate to={activeRole ? landingPath(activeRole) : "/no-access"} replace />;
+}
+
+/** /admin opens the first Admin page this person may see (Tech Team: the audit log). */
+function AdminIndex() {
+  const { has } = useAuth();
+  const admin = visibleNav(has).find((g) => g.id === "admin");
+  return admin ? <Navigate to={admin.to} replace /> : <AccessDenied />;
 }
 
 const page = (permission: Permission, element: React.ReactNode, kind: "connect" | "generic" = "generic") => (
@@ -75,6 +88,18 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Landing /> },
       { path: "home", element: page("member.home", <MemberHomePage />) },
+      { path: "dashboard", element: page("dashboard.view", <DashboardPage />) },
+      {
+        path: "admin",
+        element: <Outlet />,
+        children: [
+          { index: true, element: <AdminIndex /> },
+          { path: "users", element: page("admin.users", <UsersPage />) },
+          { path: "roles", element: page("admin.users", <RolesPage />) },
+          { path: "audit", element: page("admin.audit", <AuditPage />) },
+          { path: "settings", element: page("admin.settings", <SettingsPage />) },
+        ],
+      },
       {
         path: "welcome",
         element: <Outlet />,

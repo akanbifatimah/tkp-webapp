@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, setUnauthorizedHandler, type SignInResponse } from "@/lib/api";
+import { api, setUnauthorizedHandler, type MfaChallenge, type SignInResponse } from "@/lib/api";
 import { permissionsFor, type Permission, type Role } from "@/lib/permissions";
 import { session } from "@/lib/session";
 import type { Member } from "@/lib/types";
@@ -19,7 +19,10 @@ type AuthState = {
   activeRole: Role | null;
   setActiveRole: (role: Role) => void;
   has: (p: Permission) => boolean;
-  signIn: (email: string, password: string) => Promise<Member>;
+  /** Password step. Staff get an MFA challenge instead of a session (PRD A-2). */
+  signIn: (email: string, password: string) => Promise<SignInResult>;
+  /** Code step: completes the sign-in. */
+  verifyMfa: (ticket: string, code: string) => Promise<Member>;
   signOut: () => Promise<void>;
   /** Forget the session locally (the server already ended it, e.g. after a password change). */
   endSession: (reason: EndReason) => void;
@@ -30,8 +33,11 @@ type AuthState = {
 /**
  * expired = the server refused the session (401): come back to the same page after signing in (UI-G6).
  * signed-out = the person chose Sign out. password-changed = API-A6 ended every session.
+ * idle = no activity for the idle time in Settings (PRD 4.3): also comes back to the same page.
  */
-export type EndReason = "expired" | "signed-out" | "password-changed";
+export type EndReason = "expired" | "signed-out" | "password-changed" | "idle";
+
+export type SignInResult = { kind: "done"; member: Member } | { kind: "mfa"; challenge: MfaChallenge };
 
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -107,9 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(t);
   }, [hasToken, expiresAt, accept, clear]);
 
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      const res = await api.auth.signIn(email, password);
+  const start = useCallback(
+    (res: SignInResponse) => {
       sessionStorage.removeItem(ROLE_KEY);
       setRoleChoice(null);
       setEndReason(null);
@@ -118,6 +123,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [accept],
   );
+
+  const signIn = useCallback(
+    async (email: string, password: string): Promise<SignInResult> => {
+      const res = await api.auth.signIn(email, password);
+      if ("mfa" in res) return { kind: "mfa", challenge: res.mfa };
+      return { kind: "done", member: start(res) };
+    },
+    [start],
+  );
+
+  const verifyMfa = useCallback(async (ticket: string, code: string) => start(await api.auth.verifyMfa(ticket, code)), [start]);
 
   const signOut = useCallback(async () => {
     await api.auth.signOut().catch(() => undefined);
@@ -141,11 +157,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setActiveRole,
       has: (p) => perms.has(p),
       signIn,
+      verifyMfa,
       signOut,
       endSession: clear,
       endReason,
     };
-  }, [hasToken, member, me.isError, activeRole, setActiveRole, signIn, signOut, clear, endReason]);
+  }, [hasToken, member, me.isError, activeRole, setActiveRole, signIn, verifyMfa, signOut, clear, endReason]);
 
   return <AuthContext value={value}>{children}</AuthContext>;
 }

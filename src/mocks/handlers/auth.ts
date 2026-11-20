@@ -2,6 +2,17 @@ import { HttpResponse, http } from "msw";
 import { checkPassword } from "@/lib/password-policy";
 import { audit, db } from "../db";
 import { authenticate, fail, issueToken, latency, path, toMember } from "../http";
+import { needsMfa, resendMfa, startMfa, verifyMfa } from "../mfa";
+import type { StaffRecord } from "../seed/staff";
+import { send } from "./connect";
+
+/** A full session, once every sign-in step has passed. */
+function signedIn(user: StaffRecord) {
+  const { token, expiresAt } = issueToken(user.id);
+  user.lastSignInAt = new Date().toISOString();
+  audit(user.id, "sign_in");
+  return HttpResponse.json({ token, expiresAt, member: toMember(user) });
+}
 
 /** API-A1: one message for every failure. */
 const INVALID = "Invalid email or password";
@@ -16,9 +27,22 @@ export const authHandlers = [
       audit(null, "sign_in_failed", email || null);
       return fail(401, "INVALID_CREDENTIALS", INVALID);
     }
-    const { token, expiresAt } = issueToken(user.id);
-    audit(user.id, "sign_in");
-    return HttpResponse.json({ token, expiresAt, member: toMember(user) });
+    // PRD A-2: staff prove it is them with a one-time code before a session exists.
+    if (needsMfa(user)) return HttpResponse.json({ mfa: startMfa(user) });
+    return signedIn(user);
+  }),
+
+  http.post(path("/auth/mfa/verify"), async ({ request }) => {
+    await latency();
+    const body = (await request.json().catch(() => null)) as { ticket?: string; code?: string } | null;
+    const r = verifyMfa(body?.ticket ?? "", body?.code ?? "");
+    return r.ok ? signedIn(r.body.user) : send(r);
+  }),
+
+  http.post(path("/auth/mfa/resend"), async ({ request }) => {
+    await latency();
+    const body = (await request.json().catch(() => null)) as { ticket?: string } | null;
+    return send(resendMfa(body?.ticket ?? ""));
   }),
 
   http.post(path("/auth/token/renew"), ({ request }) => {
@@ -84,5 +108,7 @@ export const authHandlers = [
     return HttpResponse.json({ signedOut: true });
   }),
 
-  http.get(path("/settings/public"), () => HttpResponse.json(db.settings)),
+  http.get(path("/settings/public"), () =>
+    HttpResponse.json({ resetContact: db.settings.resetContact, resetRelay: db.settings.resetRelay, idleMinutes: db.settings.idleMinutes }),
+  ),
 ];

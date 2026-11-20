@@ -78,8 +78,11 @@ export const PERMISSIONS = [
   "go.view",
   "transform.view",
   "member.home",
+  // M6 Admin (PRD SA-3, CA-3, F-12)
+  "dashboard.view",
   "admin.users",
   "admin.audit",
+  "admin.settings",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -103,10 +106,10 @@ const LATER_ALL: Permission[] = ["grow.view", "care.view", "serve.view", "lead.v
 const EXPORT: Permission[] = ["welcome.export"];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  tech_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit"],
+  tech_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit", "admin.settings"],
   tech_team: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.audit"],
   lead_pastor: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL],
-  church_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL],
+  church_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL],
   church_office_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view"],
   church_office: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view"],
   integration_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS],
@@ -176,8 +179,9 @@ export const CONNECT_ACCESS_DENIED =
 /** Exact wording, doc 02 AC-04. */
 export const NO_FOLLOW_UP_TEAM = "You are not on a follow-up team yet. Ask the team lead to add you.";
 
-/** Where a role lands after sign-in (doc 02 §1). */
+/** Where a role lands after sign-in (doc 02 §1). The Figma dashboard is the Church Admin / Tech Admin home (M6). */
 export function landingPath(role: Role): string {
+  if (can(role, "dashboard.view")) return "/dashboard";
   if (can(role, "welcome.overview.view")) return "/welcome";
   if (can(role, "member.home")) return "/home";
   if (can(role, "grow.view")) return "/grow";
@@ -185,3 +189,58 @@ export function landingPath(role: Role): string {
   if (can(role, "care.view")) return "/care";
   return "/no-access";
 }
+
+/* ------------------------------------------------------------------ M6 Admin */
+
+/** PRD §2 rule 6: staff and admin accounts require MFA. Members do not (optional, PRD U4). */
+export const isStaff = (roles: readonly Role[]) => roles.some((r) => r !== "tkp_member");
+
+/** Roles that hand out full control. Granting one asks for a second confirmation (PRD SA-1 sensitive-grant guard). */
+export const SENSITIVE_ROLES: readonly Role[] = ["tech_admin"];
+
+/** Plain-words summary of each role template, for Users and roles. */
+export const ROLE_SUMMARY: Record<Role, string> = {
+  tech_admin: "Everything, including users, audit log and settings. Saves logs for guests assigned to them.",
+  tech_team: "Sees every module to support and test it. Reads the audit log. Cannot save or assign.",
+  lead_pastor: "Sees Welcome and both Connect teams; assigns guests and saves logs for guests assigned to them.",
+  church_admin: "Church dashboard, Welcome and both Connect teams; assigns guests. Never saves logs.",
+  church_office_admin: "Leads the Church Office team: sees and assigns the team's guests.",
+  church_office: "Church Office caller: works the guests assigned to them.",
+  integration_admin: "Leads the Integration Team: sees and assigns the team's guests.",
+  integration_team: "Integration caller: works the guests assigned to them.",
+  welcome_lead: "Welcome overview, guest lookup and LCM Metrics; exports guest PDFs.",
+  welcome_team: "Welcome overview and guest lookup.",
+  tkp_member: "Member home only. No staff areas.",
+  registrar: "Owns courses, exams, results and students (Grow, coming in M8).",
+  course_author: "Builds the courses and exams the Registrar assigns (M8).",
+  grader: "Marks the answers the Registrar assigns (M8).",
+  project_lead: "Runs their own projects and applicants (M9).",
+  prayer_moderator: "Moderates the Prayer Wall (M9).",
+};
+
+/** Where each permission key sits, for the read-only Roles page. */
+export const PERMISSION_LABEL: Record<Permission, { area: string; label: string }> = {
+  "dashboard.view": { area: "Dashboard", label: "Church dashboard" },
+  "welcome.overview.view": { area: "Welcome", label: "Overview" },
+  "welcome.lookup.view": { area: "Welcome", label: "Guest lookup" },
+  "welcome.lcm.view": { area: "Welcome", label: "LCM Metrics" },
+  "welcome.export": { area: "Welcome", label: "Export guest PDF" },
+  "connect.queue.view": { area: "Connect", label: "Work queue" },
+  "connect.log.view": { area: "Connect", label: "Log follow-up" },
+  "connect.scripts.view": { area: "Connect", label: "Scripts" },
+  "connect.guestTrack.view": { area: "Connect", label: "Guest Track" },
+  "connect.journey.view": { area: "Connect", label: "Guest journey" },
+  "connect.phaseBoard.view": { area: "Connect", label: "Phase board" },
+  "connect.metrics.view": { area: "Connect", label: "Team metrics" },
+  "belong.view": { area: "Journey", label: "Belong" },
+  "grow.view": { area: "Journey", label: "Grow" },
+  "care.view": { area: "Journey", label: "Care" },
+  "serve.view": { area: "Journey", label: "Serve" },
+  "lead.view": { area: "Journey", label: "Lead" },
+  "go.view": { area: "Journey", label: "Go" },
+  "transform.view": { area: "Journey", label: "Transform" },
+  "member.home": { area: "Member", label: "Member home" },
+  "admin.users": { area: "Admin", label: "Users and roles" },
+  "admin.audit": { area: "Admin", label: "Audit log" },
+  "admin.settings": { area: "Admin", label: "Settings" },
+};

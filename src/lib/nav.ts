@@ -6,7 +6,9 @@ import {
   HandHeart,
   HeartHandshake,
   Home,
+  LayoutDashboard,
   Link2,
+  ShieldCheck,
   Sparkles,
   Sprout,
   Users,
@@ -25,15 +27,24 @@ export type NavGroup = {
   step?: number;
   label: string;
   icon: LucideIcon;
-  /** Group landing path. */
+  /** Group landing path. For groups with `anyTab`, the first visible tab. */
   to: string;
   permission: Permission;
+  /** Show the group when any of its tabs is allowed (Admin: Tech Team sees only the audit log). */
+  anyTab?: boolean;
   tabs?: NavTab[];
   /** Not built yet: opens the module's "coming" page. */
   planned?: boolean;
 };
 
 export const NAV: NavGroup[] = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    to: "/dashboard",
+    permission: "dashboard.view",
+  },
   {
     id: "home",
     label: "Member home",
@@ -79,12 +90,29 @@ export const NAV: NavGroup[] = [
   { id: "lead", step: 7, label: "Lead", icon: Crown, to: "/lead", permission: "lead.view", planned: true },
   { id: "go", step: 8, label: "Go", icon: Compass, to: "/go", permission: "go.view", planned: true },
   { id: "transform", step: 9, label: "Transform", icon: BookOpen, to: "/transform", permission: "transform.view", planned: true },
+  {
+    id: "admin",
+    label: "Admin",
+    icon: ShieldCheck,
+    to: "/admin/users",
+    permission: "admin.users",
+    anyTab: true,
+    tabs: [
+      { label: "Users", to: "/admin/users", permission: "admin.users" },
+      { label: "Roles", to: "/admin/roles", permission: "admin.users" },
+      { label: "Audit log", to: "/admin/audit", permission: "admin.audit" },
+      { label: "Settings", to: "/admin/settings", permission: "admin.settings" },
+    ],
+  },
 ];
 
 /** Groups and tabs this person may see. */
 export function visibleNav(has: (p: Permission) => boolean): NavGroup[] {
-  return NAV.filter((g) => has(g.permission)).map((g) => ({
-    ...g,
-    tabs: g.tabs?.filter((t) => has(t.permission)),
-  }));
+  const out: NavGroup[] = [];
+  for (const g of NAV) {
+    const tabs = g.tabs?.filter((t) => has(t.permission));
+    if (has(g.permission)) out.push({ ...g, tabs });
+    else if (g.anyTab && tabs?.length) out.push({ ...g, to: tabs[0]!.to, tabs });
+  }
+  return out;
 }

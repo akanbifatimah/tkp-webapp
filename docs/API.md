@@ -79,6 +79,36 @@ Request:
 
 401: `{ "error": { "code": "INVALID_CREDENTIALS", "message": "Invalid email or password" } }`
 
+**Staff get a second step (M6, PRD §2 rule 6 and A-2: MFA mandatory for staff).** When the password is right and the person holds any role other than `tkp_member`, the server does **not** start a session. It emails a 6-digit code and answers 200:
+
+```json
+{ "mfa": { "ticket": "<opaque, single-use>", "method": "email", "sentTo": "g•••@example.com", "expiresAt": "2026-11-20T15:10:00Z", "resendAt": "2026-11-20T15:00:30Z" } }
+```
+
+Audit `mfa.code_sent`. `sign_in` is written only when the code is accepted. TKP Members get the session straight away, as before. The method (email code) is to be confirmed with TKP; an authenticator app would keep the same `ticket` + `code` contract.
+
+### `POST /auth/mfa/verify`
+
+Request: `{ "ticket": "…", "code": "123456" }`. 200: the same as a sign-in with a session (`token`, `expiresAt`, `member`); audit `sign_in`; `lastSignInAt` is stamped.
+
+| Status | `code` | `message` | Notes |
+|---|---|---|---|
+| 401 | `MFA_INVALID` | That code is not right. Check the latest email and try again. | `fields.code: ["4 tries left"]`; audit `mfa.failed` |
+| 401 | `MFA_LOCKED` | Too many wrong codes. Sign in again to get a new code. | After 5 wrong codes the ticket is dead |
+| 401 | `MFA_EXPIRED` | That code has expired. Sign in again to get a new one. | Code older than 10 minutes, unknown or used ticket, or the person was deactivated meanwhile |
+
+The front end does **not** treat these 401s as "session ended" (there is no session yet).
+
+### `POST /auth/mfa/resend`
+
+Request: `{ "ticket": "…" }`. 200: a new `mfa` object (same ticket, new code; the old code stops working and the try counter restarts).
+
+| Status | `code` | Notes |
+|---|---|---|
+| 429 | `TOO_SOON` | Less than 30 seconds since the last code |
+| 429 | `TOO_MANY_CODES` | At most 3 codes per sign-in, so resending cannot buy unlimited guesses |
+| 401 | `MFA_EXPIRED` | As above |
+
 **`member` differs from TKP Connect's API-A8** in one way: `roles` is an array (the PRD allows several roles per person; the front end shows a role switcher when there is more than one). TKP Connect people have exactly one.
 
 | Field | Values |
@@ -140,7 +170,9 @@ The front end sends the person to `/account/password` before anything else. TKP 
 
 No auth. For the *Forgot password?* panel (UI-S1: no self-service reset).
 
-200: `{ "resetContact": "Grace Adeyemi", "resetRelay": "Joy Ibekwe" }` (`resetRelay` may be `null`).
+200: `{ "resetContact": "Grace Adeyemi", "resetRelay": "Joy Ibekwe", "idleMinutes": 30 }` (`resetRelay` may be `null`). Only these public fields; the rest of Settings needs `GET /admin/settings`.
+
+`idleMinutes` drives the idle sign-out (PRD 4.3 "short idle timeout"): after that long without activity the front end warns for one minute, then calls `POST /auth/sign-out` and shows Sign in with "You were signed out after N minutes without activity", returning to the same page afterwards. The backend should also expire idle sessions on its side.
 
 ### Token storage (for the backend team to decide)
 
@@ -470,3 +502,133 @@ A ratio `{ done, due }` counts a guest as **due** once the metric's window has e
 | `workload[]` | For each member of the teams the caller can open: open guests; overdue (Integration = 48 h overdue, Church Office = not yet contacted); 48-hour rate over the last 90 days (Church Office = first contact; Integration = the 48 Hr Welcome tick); logs in the last 30 days |
 
 **Who may see it (Q12, open):** every Connect role, as the doc 02 matrix shows until it is answered. Audited as `connect.metrics.view`.
+
+---
+
+## 7. Admin (M6)
+
+PRD SA-1, SA-3, CA-3, F-5, F-12. Permission keys (`src/lib/permissions.ts`):
+
+| Key | Who | Opens |
+|---|---|---|
+| `dashboard.view` | Tech Admin, Church Admin | `GET /dashboard` (their home page) |
+| `admin.users` | Tech Admin | Users, Roles, every `/admin/users` call |
+| `admin.audit` | Tech Admin, Tech Team | `GET /admin/audit` |
+| `admin.settings` | Tech Admin | `GET` / `PUT /admin/settings` |
+
+Anyone else gets `403 FORBIDDEN`. Every change below is audited **with old and new values** in `meta: { before, after }` (only the fields that changed).
+
+### `GET /dashboard`
+
+The Figma dashboard (node `125:4815`) filled with TKP Connect data. Sections follow permissions, so each role gets its own dashboard.
+
+```json
+{
+  "asOf": "2026-11-20T15:00:00Z",
+  "latestServiceDate": "2026-11-17",
+  "tiles": {
+    "guestsOnRecord": 488, "firstSeen": "2024-06-02",
+    "newThisMonth": 21, "newSameMonthLastYear": 22,
+    "contacted48": { "done": 27, "of": 29 },
+    "overdue48": 10
+  },
+  "trend": [{ "month": "2025-12", "firstVisits": 19, "returnVisits": 3 }],
+  "cells": [{ "cell": "Red", "guests": 49, "active": 16 }],
+  "attention": [{ "connectId": 123, "name": "Caleb Taylor", "serviceDate": "2026-08-23", "serviceType": "Sunday 1st Service", "hoursSince": 2110, "coName": "New Volunteer", "itName": null }],
+  "attentionTotal": 10,
+  "accounts": { "active": 15, "temporary": 1, "deactivated": 1, "signedInThisWeek": 13 },
+  "activity": []
+}
+```
+
+| Field | Definition (to confirm with TKP) |
+|---|---|
+| `guestsOnRecord` | Connect journeys, one per person (everyone who has filled in the form) |
+| `newThisMonth` | Form entries with visit number 1 in the current church-time month; `newSameMonthLastYear` is the same month a year earlier |
+| `contacted48` | Guests whose 48 hours ended in the last 30 days (`of`), and those with a saved log from either team **or** the 48 Hr Welcome tick before the 48 hours ran out (`done`) |
+| `overdue48` / `attention` | TKP Connect BR-13, unchanged; `attention` holds the 6 oldest |
+| `trend` | The last 12 months of form entries: visit 1 vs visit 2 or later |
+| `cells` | This year's form entries by home cell (ZIP map; `N/A` = not on the cell map), and Active journeys per cell |
+| `accounts` | `null` unless the caller has `admin.users` |
+| `activity` | The latest 6 audit entries (same shape as `GET /admin/audit` items); `null` unless the caller has `admin.audit` |
+
+### `GET /admin/users?q=&role=&status=&page=&pageSize=`
+
+`status`: `active`, `temporary` (must change their password), `deactivated`, or `all`. Sorted by name. Never returns passwords.
+
+200: `{ "items": [AdminUser], "page", "pageSize", "total", "counts": { "active": 15, "temporary": 1, "deactivated": 1 } }`
+
+`AdminUser`: `{ id, fullName, email, phone, roles[], connectTeam, status, createdAt, lastSignInAt, rowVer }`
+
+### `POST /admin/users`
+
+Accounts are created only here: there is no self sign-up. Request: `{ fullName, email, phone|null, roles[], connectTeam|null }`.
+
+201: `{ "user": AdminUser, "temporaryPassword": "Meadow-5006$k" }`. The temporary password passes the password rules, is returned **once** and is never readable again. The person must replace it at first sign-in (API-A7). Audit `user.create`; the password is never written to the audit log.
+
+| Status | `code` | When |
+|---|---|---|
+| 409 | `EMAIL_TAKEN` | `fields.email`: Someone already uses this email address |
+| 422 | `VALIDATION_FAILED` | `fields.fullName` (2–120 characters), `fields.email`, `fields.roles` (at least one; TKP Member cannot be combined with staff roles), `fields.connectTeam` |
+
+### `PUT /admin/users/{id}`
+
+Request: the same fields plus `rowVer`. 200: `{ "user": AdminUser }`. Audit `user.update` with the changed fields. Role changes take effect at the person's next request (API-A3 re-reads them).
+
+| Status | `code` | When |
+|---|---|---|
+| 409 | `CONFLICT` | Stale `rowVer` |
+| 409 | `SELF_DEMOTE` | Removing your own Tech Admin role |
+| 409 | `LAST_TECH_ADMIN` | It would leave no active Tech Admin |
+| 409 / 422 | as for create | |
+
+**Sensitive-grant guard (PRD SA-1):** the front end asks for a second confirmation before giving anyone Tech Admin.
+
+### `POST /admin/users/{id}/deactivate` · `POST /admin/users/{id}/reactivate`
+
+200: `{ "user": AdminUser }`. Deactivating stamps the sessions-revoked time, so the person is signed out at their next request and cannot sign in (API-A1, A3). Their logs and Connect assignments stay. Audits `user.deactivate` / `user.reactivate`. 409 `SELF_DEACTIVATE`, 409 `LAST_TECH_ADMIN`. The front end confirms first.
+
+### `POST /admin/users/{id}/reset-password`
+
+UI-S1: no self-service reset. 200: `{ "user", "temporaryPassword" }` (shown once). The old password stops working, every session ends and `mustChangePassword` is set. Audit `user.password.reset`. 409 `SELF_RESET` (use Change password), 409 `DEACTIVATED`.
+
+### `POST /admin/users/{id}/sign-out-everywhere`
+
+PRD A-5, done for someone else (a lost phone, a shared computer). 200: `{ "user" }`. The password is unchanged. Audit `user.sessions.revoke`.
+
+### `GET /admin/audit?q=&actorId=&category=&from=&to=&page=&pageSize=`
+
+Read-only and immutable: there is no edit or delete endpoint. Newest first. `from` / `to` are church-time dates (`YYYY-MM-DD`, inclusive). `q` matches the action, the person and the target.
+
+| `category` | Actions |
+|---|---|
+| `sign-in` | `sign_in`, `sign_in_failed`, `sign_out`, `password.*`, `mfa.*` |
+| `welcome` | `welcome.*` except exports |
+| `connect` | `connect.*` |
+| `exports` | `*.export` |
+| `users` | `user.*` |
+| `settings` | `settings.*` |
+
+200: `{ "items": [AuditEntry], "page", "pageSize", "total", "actors": [{ "id", "fullName" }], "retentionDays": 730 }`
+
+`AuditEntry`: `{ id, at, actorId, actorName, action, target, targetLabel, meta }`. `targetLabel` is the server's readable name for the target (a person's name, "Guest #5446", "Connect #480", "Settings"), so the front end never looks targets up itself. `actorName` is `null` for failed sign-ins.
+
+### `GET /admin/settings` · `PUT /admin/settings`
+
+```json
+{
+  "settings": {
+    "resetContact": "Grace Adeyemi", "resetRelay": "Joy Ibekwe",
+    "idleMinutes": 30, "forcePasswordChange": true, "auditRetentionDays": 730,
+    "mfaForStaff": true, "timeZone": "America/Chicago",
+    "rowVer": 1, "updatedAt": null, "updatedBy": null
+  }
+}
+```
+
+`PUT` takes `{ resetContact, resetRelay|null, idleMinutes, forcePasswordChange, auditRetentionDays, rowVer }` and returns the same shape. `mfaForStaff` and `timeZone` are read-only: MFA for staff is a PRD rule, not a switch. `forcePasswordChange` is the API-A7 rule in §2. Audit `settings.update`.
+
+| Status | `code` | When |
+|---|---|---|
+| 409 | `CONFLICT` | Stale `rowVer` (another admin saved first) |
+| 422 | `VALIDATION_FAILED` | `resetContact` 2–80 characters; `resetRelay` up to 80; `idleMinutes` 15, 30 or 60; `auditRetentionDays` 365, 730, 1825 or 2555 |

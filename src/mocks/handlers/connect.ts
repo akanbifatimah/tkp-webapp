@@ -5,7 +5,7 @@ import { authenticate, fail, latency, path } from "../http";
 import { DEPARTMENTS } from "../seed/guests";
 
 /** HTTP wrappers around the mock Connect server (docs/API.md §3). */
-export const send = <T,>(r: Result<T>) => (r.ok ? HttpResponse.json(r.body as object, { status: r.status }) : fail(r.status, r.code, r.message));
+export const send = <T,>(r: Result<T>) => (r.ok ? HttpResponse.json(r.body as object, { status: r.status }) : fail(r.status, r.code, r.message, r.fields));
 
 export const connectHandlers = [
   http.get(path("/connect/queue"), async ({ request }) => {

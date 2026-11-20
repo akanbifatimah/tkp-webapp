@@ -18,6 +18,8 @@ export type PublicSettings = {
   resetContact: string;
   /** Optional second person who passes the message on. */
   resetRelay: string | null;
+  /** Minutes without activity before the console signs out (PRD 4.3). */
+  idleMinutes: number;
 };
 
 export type Paged<T> = { items: T[]; page: number; pageSize: number; total: number };

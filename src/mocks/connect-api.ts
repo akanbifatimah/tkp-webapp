@@ -35,7 +35,9 @@ import type { StaffRecord } from "./seed/staff";
  * Every refusal uses the live app's exact message (doc 04 §6).
  */
 
-export type Result<T> = { ok: true; status: number; body: T } | { ok: false; status: number; code: string; message: string };
+export type Result<T> =
+  | { ok: true; status: number; body: T }
+  | { ok: false; status: number; code: string; message: string; fields?: Record<string, string[]> };
 const ok = <T,>(body: T, status = 200): Result<T> => ({ ok: true, status, body });
 const no = (status: number, code: string, message: string): Result<never> => ({ ok: false, status, code, message });
 

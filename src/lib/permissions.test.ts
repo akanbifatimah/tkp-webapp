@@ -91,6 +91,33 @@ describe("landing and navigation", () => {
     expect(nav[0]?.tabs?.map((t) => t.label)).toEqual(["Overview", "Guest lookup"]);
   });
 
+  it("M6: Tech Admin and Church Admin land on the dashboard", () => {
+    expect(landingPath("tech_admin")).toBe("/dashboard");
+    expect(landingPath("church_admin")).toBe("/dashboard");
+    expect(landingPath("lead_pastor")).toBe("/welcome");
+  });
+
+  it("M6: the Admin group follows its tabs; Tech Team sees only the audit log", () => {
+    const nav = (role: Role) => {
+      const perms = permissionsFor([role]);
+      return visibleNav((p) => perms.has(p)).find((g) => g.id === "admin");
+    };
+    expect(nav("tech_admin")?.tabs?.map((t) => t.label)).toEqual(["Users", "Roles", "Audit log", "Settings"]);
+    expect(nav("tech_team")?.tabs?.map((t) => t.label)).toEqual(["Audit log"]);
+    expect(nav("tech_team")?.to).toBe("/admin/audit");
+    expect(nav("church_admin")).toBeUndefined();
+    expect(nav("lead_pastor")).toBeUndefined();
+  });
+
+  it("M6: only Tech Admin manages users and settings", () => {
+    for (const r of ["tech_team", "lead_pastor", "church_admin", "church_office_admin", "integration_admin"] as Role[]) {
+      expect(can(r, "admin.users")).toBe(false);
+      expect(can(r, "admin.settings")).toBe(false);
+    }
+    expect(can("tech_admin", "admin.users")).toBe(true);
+    expect(can("tech_admin", "admin.settings")).toBe(true);
+  });
+
   it("doc 02 §3: later modules shown only to the agreed roles", () => {
     expect(can("church_office", "belong.view")).toBe(true);
     expect(can("church_office", "grow.view")).toBe(false);

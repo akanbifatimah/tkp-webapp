@@ -6,3 +6,7 @@ dist
 !.env.example
 coverage
 .DS_Store
+
+# Internal docs stay local; only the API contract (for the backend team) is shared
+docs/*
+!docs/API.md

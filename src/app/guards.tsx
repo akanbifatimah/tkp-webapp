@@ -13,7 +13,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     if (endReason === "password-changed") return <Navigate to="/sign-in?changed=1" replace />;
     if (endReason === "signed-out") return <Navigate to="/sign-in" replace />;
     const next = `${location.pathname}${location.search}`;
-    return <Navigate to={`/sign-in?next=${encodeURIComponent(next)}`} replace />;
+    return <Navigate to={`/sign-in?${endReason === "idle" ? "idle=1&" : ""}next=${encodeURIComponent(next)}`} replace />;
   }
   // API-A7: a temporary password must be replaced before anything else.
   if (member?.mustChangePassword && location.pathname !== CHANGE_PASSWORD_PATH) {

@@ -19,6 +19,18 @@ export type StaffRecord = {
   password: string;
   /** Sessions issued before this are refused (API-A3). */
   sessionsRevokedAt: number;
+  createdAt: string;
+  lastSignInAt: string | null;
+  /** Concurrency check for edits (docs/API.md §1). */
+  rowVer: number;
+};
+
+const DAY = 86_400_000;
+/** Deterministic dates relative to page load, so the lists look lived-in. */
+const daysAgo = (n: number, hour = 15) => {
+  const d = new Date(Date.now() - n * DAY);
+  d.setUTCHours(hour, (n * 7) % 60, 0, 0);
+  return d.toISOString();
 };
 
 const s = (
@@ -38,6 +50,9 @@ const s = (
   mustChangePassword: false,
   password: DEMO_PASSWORD,
   sessionsRevokedAt: 0,
+  createdAt: daysAgo(300 - Number(id.slice(1)) * 11),
+  lastSignInAt: daysAgo(Number(id.slice(1)) % 6, 14 + (Number(id.slice(1)) % 5)),
+  rowVer: 1,
   ...extra,
 });
 
@@ -59,7 +74,7 @@ export const STAFF: StaffRecord[] = [
   // A team role without a follow-up team (AC-04 message)
   s("u15", "Isaac Ward", ["integration_team"], null),
   // Signed in with a temporary password: must choose their own first (API-A7)
-  s("u17", "New Volunteer", ["church_office"], "church_office", { mustChangePassword: true }),
+  s("u17", "New Volunteer", ["church_office"], "church_office", { mustChangePassword: true, createdAt: daysAgo(1), lastSignInAt: null }),
   // Deactivated: cannot sign in (API-A1)
-  s("u16", "Former Volunteer", ["church_office"], "church_office", { isActive: false }),
+  s("u16", "Former Volunteer", ["church_office"], "church_office", { isActive: false, lastSignInAt: daysAgo(96) }),
 ];

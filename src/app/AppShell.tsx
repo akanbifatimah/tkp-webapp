@@ -8,6 +8,7 @@ import { useAuth } from "@/features/auth/auth";
 import { pageTransition } from "@/lib/motion";
 import { ROLE_LABEL } from "@/lib/permissions";
 import { formatLongDay, greeting } from "@/lib/time";
+import { IdleGuard } from "./IdleGuard";
 import { useSidebarCollapsed } from "./rail";
 import { Sidebar } from "./Sidebar";
 
@@ -40,6 +41,7 @@ export function AppShell() {
       >
         Skip to content
       </a>
+      <IdleGuard />
 
       {/* Desktop sidebar */}
       <aside

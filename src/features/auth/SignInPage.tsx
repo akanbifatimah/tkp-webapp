@@ -9,13 +9,15 @@ import { z } from "zod";
 import { CrownBackdrop } from "@/components/three/CrownBackdrop";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, type MfaChallenge } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { env } from "@/lib/env";
 import { EASE_OUT } from "@/lib/motion";
 import { landingPath } from "@/lib/permissions";
 import { safeNext, useAuth } from "./auth";
 import { DemoAccounts } from "./DemoAccounts";
+import { MfaStep } from "./MfaStep";
+import type { Member } from "@/lib/types";
 
 /** TKP Connect UI-S1, in the TKP Hub look. */
 const schema = z.object({
@@ -42,6 +44,7 @@ export function SignInPage() {
 
   // After a password change the session is being ended: stay here and show the notice.
   const changed = params.get("changed") === "1";
+  const idle = params.get("idle") === "1";
   if (status === "signed-in" && activeRole && !changed) return <Navigate to={next ?? landingPath(activeRole)} replace />;
 
   return (
@@ -78,14 +81,14 @@ export function SignInPage() {
         </section>
 
         {/* Form side */}
-        <section className="relative z-10 flex items-start justify-center px-4 pb-10 sm:px-8 lg:items-center lg:py-12">
+        <section className="relative z-10 flex min-w-0 items-start justify-center px-4 pb-10 sm:px-8 lg:items-center lg:py-12">
           <motion.div
             initial={{ opacity: 0, y: 24, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.6, ease: EASE_OUT, delay: 0.1 }}
-            className="w-full max-w-110 rounded-[28px] border border-white/60 bg-cream-100 p-6 text-ink shadow-panel sm:p-9"
+            className="w-full max-w-110 min-w-0 rounded-[28px] border border-white/60 bg-cream-100 p-6 text-ink shadow-panel sm:p-9"
           >
-            <SignInCard next={next} changed={changed} />
+            <SignInCard next={next} changed={changed} idle={idle} />
           </motion.div>
         </section>
       </div>
@@ -96,13 +99,32 @@ export function SignInPage() {
   );
 }
 
-function SignInCard({ next, changed }: { next: string | null; changed: boolean }) {
-  const [mode, setMode] = useState<"sign-in" | "forgot">("sign-in");
+function SignInCard({ next, changed, idle }: { next: string | null; changed: boolean; idle: boolean }) {
+  const [mode, setMode] = useState<"sign-in" | "forgot" | "mfa">("sign-in");
+  const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
+  const navigate = useNavigate();
+  const land = (member: Member) => {
+    const role = member.roles[0];
+    navigate(next ?? (role ? landingPath(role) : "/no-access"), { replace: true });
+  };
   return (
     <AnimatePresence mode="wait" initial={false}>
       {mode === "sign-in" ? (
         <motion.div key="sign-in" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.2 }}>
-          <SignInForm next={next} changed={changed} onForgot={() => setMode("forgot")} />
+          <SignInForm
+            changed={changed}
+            idle={idle}
+            onForgot={() => setMode("forgot")}
+            onSignedIn={land}
+            onMfa={(c) => {
+              setChallenge(c);
+              setMode("mfa");
+            }}
+          />
+        </motion.div>
+      ) : mode === "mfa" && challenge ? (
+        <motion.div key="mfa" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.2 }}>
+          <MfaStep challenge={challenge} onDone={land} onBack={() => setMode("sign-in")} />
         </motion.div>
       ) : (
         <motion.div key="forgot" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.2 }}>
@@ -113,9 +135,21 @@ function SignInCard({ next, changed }: { next: string | null; changed: boolean }
   );
 }
 
-function SignInForm({ next, changed, onForgot }: { next: string | null; changed: boolean; onForgot: () => void }) {
+function SignInForm({
+  changed,
+  idle,
+  onForgot,
+  onSignedIn,
+  onMfa,
+}: {
+  changed: boolean;
+  idle: boolean;
+  onForgot: () => void;
+  onSignedIn: (member: Member) => void;
+  onMfa: (challenge: MfaChallenge) => void;
+}) {
   const { signIn } = useAuth();
-  const navigate = useNavigate();
+  const settings = useQuery({ queryKey: ["settings", "public"], queryFn: api.settings.public, staleTime: 60_000, enabled: idle });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const {
@@ -128,9 +162,9 @@ function SignInForm({ next, changed, onForgot }: { next: string | null; changed:
   const onSubmit = handleSubmit(async ({ email, password }) => {
     setError(null);
     try {
-      const member = await signIn(email, password);
-      const role = member.roles[0];
-      navigate(next ?? (role ? landingPath(role) : "/no-access"), { replace: true });
+      const step = await signIn(email, password);
+      if (step.kind === "mfa") onMfa(step.challenge);
+      else onSignedIn(step.member);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Invalid email or password");
     }
@@ -145,6 +179,12 @@ function SignInForm({ next, changed, onForgot }: { next: string | null; changed:
         <p role="status" className="mt-5 flex items-center gap-2 rounded-xl border border-ok/20 bg-ok-soft px-4 py-3 text-sm font-bold text-ok">
           <ShieldCheck className="size-4 shrink-0" aria-hidden />
           Password changed. Please sign in with your new password.
+        </p>
+      ) : null}
+      {idle && !changed && !error ? (
+        <p role="status" className="mt-5 flex items-center gap-2 rounded-xl border border-gold-300 bg-gold-100 px-4 py-3 text-sm font-bold text-gold-800">
+          <LockKeyhole className="size-4 shrink-0" aria-hidden />
+          You were signed out after {settings.data?.idleMinutes ?? "some"} minutes without activity, to keep guest details safe.
         </p>
       ) : null}
 

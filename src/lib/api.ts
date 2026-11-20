@@ -16,6 +16,18 @@ import type {
 import type { FeatureCollection, Geometry } from "geojson";
 import type { LcmResponse } from "@/features/welcome/lcm-types";
 import type { GuestRecord, GuestSearch, GuestSearchResponse, OverviewResponse, Scope } from "@/features/welcome/types";
+import type {
+  AdminSettings,
+  AdminUser,
+  AuditQuery,
+  AuditResponse,
+  DashboardResponse,
+  SettingsInput,
+  TempPasswordResponse,
+  UserInput,
+  UserQuery,
+  UsersResponse,
+} from "@/features/admin/types";
 import type { Team } from "./permissions";
 import type { Member, PublicSettings } from "./types";
 
@@ -133,6 +145,10 @@ export const newClientRequestId = () => crypto.randomUUID();
 
 export type SignInResponse = { token: string; expiresAt: string; member: Member };
 
+/** Staff get a second step instead of a session (PRD A-2). docs/API.md §2. */
+export type MfaChallenge = { ticket: string; method: "email"; sentTo: string; expiresAt: string; resendAt: string };
+export type SignInStep = SignInResponse | { mfa: MfaChallenge };
+
 /** Static public files shipped with the front end (not the API). */
 async function staticJson<T>(url: string): Promise<T> {
   let res: Response;
@@ -152,8 +168,9 @@ export const api = {
       staticJson<FeatureCollection<Geometry, { n: string; lat?: number; lon?: number }>>(`/geo/${name}.json`),
   },
   auth: {
-    signIn: (email: string, password: string) =>
-      request<SignInResponse>("/auth/sign-in", { body: { email, password } }),
+    signIn: (email: string, password: string) => request<SignInStep>("/auth/sign-in", { body: { email, password } }),
+    verifyMfa: (ticket: string, code: string) => request<SignInResponse>("/auth/mfa/verify", { body: { ticket, code } }),
+    resendMfa: (ticket: string) => request<MfaChallenge>("/auth/mfa/resend", { body: { ticket } }),
     renew: () => request<SignInResponse>("/auth/token/renew", { method: "POST" }),
     signOut: () => request<void>("/auth/sign-out", { method: "POST" }),
     me: (signal?: AbortSignal) => request<{ member: Member }>("/me", { signal }),
@@ -162,6 +179,19 @@ export const api = {
   },
   settings: {
     public: () => request<PublicSettings>("/settings/public"),
+  },
+  dashboard: (signal?: AbortSignal) => request<DashboardResponse>("/dashboard", { signal }),
+  admin: {
+    users: (q: UserQuery, signal?: AbortSignal) => request<UsersResponse>("/admin/users", { query: q, signal }),
+    createUser: (body: UserInput) => request<TempPasswordResponse>("/admin/users", { body }),
+    updateUser: (id: string, body: UserInput & { rowVer: number }) => request<{ user: AdminUser }>(`/admin/users/${id}`, { method: "PUT", body }),
+    deactivate: (id: string) => request<{ user: AdminUser }>(`/admin/users/${id}/deactivate`, { method: "POST" }),
+    reactivate: (id: string) => request<{ user: AdminUser }>(`/admin/users/${id}/reactivate`, { method: "POST" }),
+    resetPassword: (id: string) => request<TempPasswordResponse>(`/admin/users/${id}/reset-password`, { method: "POST" }),
+    signOutEverywhere: (id: string) => request<{ user: AdminUser }>(`/admin/users/${id}/sign-out-everywhere`, { method: "POST" }),
+    audit: (q: AuditQuery, signal?: AbortSignal) => request<AuditResponse>("/admin/audit", { query: q, signal }),
+    settings: (signal?: AbortSignal) => request<{ settings: AdminSettings }>("/admin/settings", { signal }),
+    saveSettings: (body: SettingsInput) => request<{ settings: AdminSettings }>("/admin/settings", { method: "PUT", body }),
   },
   connect: {
     queue: (q: { team?: Team; date?: string }, signal?: AbortSignal) =>

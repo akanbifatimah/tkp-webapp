@@ -39,7 +39,8 @@ export function Dialog({
     const opener = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const t = window.setTimeout(() => panel.current?.querySelector<HTMLElement>("[data-autofocus],button")?.focus(), 30);
+    // A marked control first (e.g. Done), else the first button.
+    const t = window.setTimeout(() => (panel.current?.querySelector<HTMLElement>("[data-autofocus]") ?? panel.current?.querySelector<HTMLElement>("button"))?.focus(), 30);
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
