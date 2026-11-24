@@ -206,7 +206,7 @@ export function Sidebar({
           })}
         </ul>
 
-        {env.useMocks ? (
+        {env.showUiKit ? (
           <RailTooltip label="UI kit (mock mode)" enabled={collapsed}>
             <NavLink
               to="/dev/ui"

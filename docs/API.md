@@ -423,6 +423,7 @@ Follows TKP Connect API-W5 (`itg.usp_WelcomeLcmMetrics`). This is the monthly Le
 | `serviceByDate[]` | `{ date, type, guests }` for the month's service dates |
 | `otherAnswers[]` | `{ text, guests }`: the month's "Other" answers in the guests' own words |
 | `visitorCities[]` | Map 2: `{ city, state, country, guests, lat, lon, zips[] }`. `lat`/`lon` are `null` without a US ZIP; the page places those guests on their country |
+| `outcomes[]` | Follow-up and growth: nine measures in a fixed order, described below |
 
 **Emerging ZIPs (BR-21).** An emerging ZIP is in Greater Houston (the 9-county metro plus every cell ZIP) but not on the cell list. It gets one signal:
 - **Emerging**: YTD ≥ 10 and ≥ 3× the same period last year.
@@ -432,6 +433,57 @@ Follows TKP Connect API-W5 (`itg.usp_WelcomeLcmMetrics`). This is the monthly Le
 `signal` is `null` for cell ZIPs.
 
 Audited as `welcome.lcm.view`.
+
+### Follow-up and growth (`outcomes[]`)
+
+**New; not in TKP Connect,** which listed these as "Suggested metrics to add" with no numbers. Added on 2026-11-24. The mock is `src/mocks/lcm-outcomes.ts`. Totals only.
+
+Each item:
+
+```json
+{
+  "key": "return30", "label": "Came back within 30 days",
+  "measures": "First-time guests confirmed back at a service within 30 days.",
+  "source": "A later welcome form, or Connect “Returned for 2nd visit”",
+  "unit": "%", "higherIsBetter": true,
+  "cohort": "2026-09",
+  "current": { "count": 4, "of": 29, "value": 13.8 },
+  "prior": { "count": 2, "of": 26, "value": 7.7, "cohort": "2026-08" },
+  "open": 0,
+  "breakdown": [{ "label": "Phone", "count": 34, "of": 36, "note": null }]
+}
+```
+
+- **The cohort.** Most measures look at **first-time guests** (`visitNumber` = 1) and count what happened to them inside a fixed window.
+  - When the window needs time to close, the cohort is an earlier month (`cohort` ≠ `meta.month`), so the leadership meeting sees a settled number.
+  - `prior` is the cohort one month earlier.
+  - Measures with lag 0 use the same-days rule as the rest of the report.
+- **Counting.** Events are counted up to the end of the window, not up to `asOf`.
+- **`open`** is the number of cohort guests whose window has not closed yet (measured against now) and who have not been counted. A number with `open` > 0 can still go up.
+- **`value`** is `count / of × 100`, rounded to 1 decimal. It is `null` when `of` = 0.
+- **The `type` filter** applies to the cohort. A guest who comes back to a *different* service still counts as back.
+
+| `key` | Lag | Cohort (`of`) | Counted (`count`) | Window |
+|---|---|---|---|---|
+| `contact48h` | 0 | First-time guests | Earliest of: any Connect log `savedAt`, checklist `CoWelcomeCall`, checklist `P1Welcome48h`, within 48 h of `submittedAt` | 48 h from the form |
+| `return30` | 1 | First-time guests | A later form entry from the same person (`visitNumber` > 1), or `returnVisitDate`, within 30 days of the service date | 30 days |
+| `return90` | 3 | First-time guests | Same, within 90 days | 90 days |
+| `cellPlacement` | 1 | First-time guests | The first log with Life Group = "Joined Cell Group" (else the Phase 1 sign-off when the guest's Life Group is "Joined Cell Group"), within 28 days | 28 days |
+| `conversion` | 3 | First-time guests | Journey `status` = Completed (all three integration phases) | 12 weeks |
+| `undecided` | 1 | First-time guests whose form said "Undecided" (or "Maybe") about membership | Connect later recorded wants membership "Yes", or Integration membership "Interested" | none |
+| `per100` | 0 | Total headcount of the month's services (to `asOf`, by `type`) | First-time guests in the month. `unit` = "per 100" | none |
+| `completeness` | 0 | Every form in the month, repeat visits included | Phone, ZIP and age bracket all filled in. `breakdown` gives each field | none |
+| `lowRatings` | 0 | Forms in the month that rated at least one area | Rated any area **5 or below** out of 10. `higherIsBetter` = false. `breakdown` gives each area with guests rated ≤ 5, out of those who rated it, with `note` = the department the alert goes to | none |
+
+**New data the backend needs:**
+- **Service headcounts:** a small new table `{ date, serviceType, headcount }`, one row per service held. TKP does not collect headcounts today; the mock seeds placeholder numbers. Who enters them (ushers after each service?) and where is open.
+- **Low-rating owners:** area → department. The mock uses placeholders (Music → Choir / Music Ministry, Preaching → Lead Pastor's office, Comfort, Parking and Traffic → Ushering / Protocol, Hospitality and The people → Welcome Team, Church environment → Facilities).
+- **Low-rating alerts.** The PRD routes each low rating to the department head. Sending the alert (email or in-app, when the form arrives) is a backend job. The report only counts the low ratings.
+
+**Open questions:**
+- **Conversion.** Connect has no member database, so `conversion` counts finished integration journeys. When the member database (or orientation attendance) is available, count "became a member or attended orientation" instead and update `source`.
+- **Headcounts.** Who records them, and from which date?
+- **Owners.** Confirm the department for each rating area, and the 5-out-of-10 threshold.
 
 ### `GET /welcome/zipgeo?all=1`
 
@@ -632,3 +684,292 @@ Read-only and immutable: there is no edit or delete endpoint. Newest first. `fro
 |---|---|---|
 | 409 | `CONFLICT` | Stale `rowVer` (another admin saved first) |
 | 422 | `VALIDATION_FAILED` | `resetContact` 2–80 characters; `resetRelay` up to 80; `idleMinutes` 15, 30 or 60; `auditRetentionDays` 365, 730, 1825 or 2555 |
+
+---
+
+## 8. Cells and ZIPs, Services (M7)
+
+PRD W-12, W-13, W-2, W-11, IL-5, CA-2, G-4. Permission keys:
+
+| Key | Who | Opens |
+|---|---|---|
+| `config.cells` | Tech Admin, Church Admin, Integration Admin | Admin › Cells and ZIPs, every `/welcome/cell-map` call |
+| `config.services` | Tech Admin, Church Admin | Admin › Services, every change to `/welcome/services` |
+
+Every change is audited with old and new values (audit category `welcome`). Anyone else gets `403 FORBIDDEN`.
+
+### `GET /welcome/cell-map`
+
+```json
+{
+  "cells": [{ "cell": "Red", "entries": 88, "thisYear": 49,
+              "zips": [{ "zip": "77450", "city": "Katy", "county": "Harris", "entries": 23, "thisYear": 12, "lastSeen": "2026-10-18" }] }],
+  "unmapped": [{ "zip": "77082", "city": "Houston", "county": "Harris", "entries": 21, "thisYear": 15, "lastSeen": "2026-11-15" }],
+  "outOfArea": 15, "noZip": 13,
+  "rowVer": 3, "updatedAt": "2026-11-20T15:02:00Z", "updatedBy": "Esther Coleman"
+}
+```
+
+`cells` is always Red, Yellow, Blue, Green (the four cells are fixed; adding a fifth is an open question). `unmapped` lists Greater Houston ZIPs (on the ZipGeo list, or 77xxx) that guests gave but no cell covers, busiest this year first (PRD W-11). `outOfArea` and `noZip` count entries that stay N/A. `city` / `county` come from ZipGeo, else the city most guests wrote. The whole map has one `rowVer`.
+
+### `PUT /welcome/cell-map/zips/{zip}` · `DELETE /welcome/cell-map/zips/{zip}?rowVer=`
+
+`PUT` body: `{ "cell": "Green", "rowVer": 3 }`. Adds the ZIP to a cell or moves it from another. `DELETE` takes it off the map. 200 for both:
+
+```json
+{ "zip": "77082", "cell": "Green", "from": null, "recalculated": 21, "rowVer": 4 }
+```
+
+**W-12: a changed mapping recalculates the cell group of every form entry with that ZIP, past months included** (`recalculated` = entries changed), so Welcome, LCM Metrics (including `/welcome/zipgeo`'s `cellGroup`), Connect and the dashboard follow at once. Audits `welcome.cellmap.set` / `welcome.cellmap.remove` with `before: { cell }`, `after: { cell, recalculated }` (`"N/A"` = no cell). An unchanged mapping changes nothing and is not audited. The front end confirms a removal first.
+
+| Status | `code` | When |
+|---|---|---|
+| 409 | `CONFLICT` | Stale `rowVer` (someone changed the map) |
+| 404 | `NOT_FOUND` | `DELETE` of a ZIP that is not on the map |
+| 422 | `VALIDATION_FAILED` | `fields.zip` (5 digits), `fields.cell` (Red, Yellow, Blue or Green) |
+
+### `GET /welcome/services`
+
+Readable by `config.services` and by anyone who filters Welcome by service (`welcome.overview.view`, `welcome.lookup.view`, `welcome.lcm.view`); the guest form reads the same list (PRD G-4). Active services first, in form order, then retired ones.
+
+```json
+{
+  "items": [{
+    "id": "svc-1", "name": "Sunday 1st Service", "shortName": "1st service",
+    "kind": "weekly", "day": 0, "time": "09:30", "startsOn": null, "endsOn": null,
+    "shortForm": false, "active": true, "sortOrder": 1,
+    "entries": 221, "lastUsed": "2026-11-15", "onForm": true,
+    "rowVer": 1, "updatedAt": null
+  }],
+  "formToday": ["Sunday 1st Service", "Sunday 2nd Service", "Tuesday Bible Study", "Power Night", "Other"]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `kind` | `weekly` (needs `day` 0 = Sunday … 6 and `time` `HH:MM`, church time) or `special` |
+| `startsOn` / `endsOn` | Special events: the dates the form offers it, inclusive. Both `null` = on the form until retired |
+| `shortForm` | Uses the short guest form (PRD W-2) |
+| `onForm` | Active, and weekly or inside its dates (church date) |
+| `entries` / `lastUsed` | Form entries naming this service |
+| `formToday` | What the form lists today, in order; it always ends with `Other` |
+
+### `POST /welcome/services` · `PUT /welcome/services/{id}`
+
+Body: `{ name, shortName, kind, day, time, startsOn, endsOn, shortForm }` (`PUT` adds `rowVer`). `shortName` defaults to the first 20 characters of `name`. `POST` → 201 `{ "service" }`, added at the end of the active list. `PUT` → 200 `{ "service", "renamedEntries" }`.
+
+**A new name applies to past entries too**: an entry points at its service, so its name follows (`renamedEntries` = entries now showing the new name). Audits `welcome.service.create` / `welcome.service.update` (changed fields only, plus `renamedEntries`).
+
+| Status | `code` | When |
+|---|---|---|
+| 409 | `NAME_TAKEN` | `fields.name`: another service (active or retired) has this name, ignoring case |
+| 409 | `CONFLICT` | Stale `rowVer` |
+| 422 | `VALIDATION_FAILED` | `fields.name` (2–60, not "Other"), `fields.shortName` (up to 20), `fields.kind`, `fields.day`, `fields.time`, `fields.startsOn` / `fields.endsOn` (valid dates, both or neither, last ≥ first) |
+
+### `POST /welcome/services/{id}/retire` · `POST /welcome/services/{id}/restore`
+
+200 `{ "service" }`. Retired services leave the form; their entries stay and still count in every report. A restored service goes to the end of the active list. Audits `welcome.service.retire` / `welcome.service.restore`. 409 `LAST_SERVICE`: the form must keep at least one active service. The front end confirms a retire first.
+
+### `DELETE /welcome/services/{id}`
+
+200 `{ "deleted": true }`. Only for a service no entry names (a typo); anything else is retired. Audit `welcome.service.delete` with `before: { name }`. 409 `IN_USE` (has entries: retire it instead), 409 `LAST_SERVICE`. The front end confirms first.
+
+### `PUT /welcome/services/order`
+
+Body: `{ "ids": ["svc-2", "svc-1", …] }`, every active service exactly once (else 422 `VALIDATION_FAILED`, `fields.ids`). 200: the same shape as `GET /welcome/services`. Audit `welcome.service.reorder` with the old and new order (only when it changed).
+
+## 9. QR codes (M7)
+
+PRD 5.8 (QR-1 to QR-10), 6.14 (Q-1 to Q-8), 8.3 "QR code edge cases". Screen: Welcome › QR codes (`/welcome/qr`) and its print screen (`/welcome/qr/print`). Permission keys:
+
+| Key | Who | Opens |
+|---|---|---|
+| `qr.view` | Tech Admin, Church Admin, Integration Admin, Welcome Lead, Welcome Team, Lead Pastor, Tech Team | The list, the detail and the scan counts |
+| `qr.print` | Tech Admin, Church Admin, Integration Admin, Welcome Lead, Welcome Team | The print screen and `POST /welcome/qr-codes/print` |
+| `qr.manage` | Tech Admin, Church Admin, Integration Admin | Every change, and `POST /welcome/qr-codes/check` |
+
+The PRD says "church_admin and integration_lead create and edit; welcome_team can view and print; pastor_exec sees scan counts only". Here Integration Admin stands for the integration lead and Lead Pastor for pastor_exec. Tech Admin manages everything and Tech Team reads, as everywhere. Anyone else gets `403 FORBIDDEN`.
+
+**Times.** `activeFrom` and `expiresAt` are UTC instants (ISO 8601). Screens show and enter them in church time (America/Chicago), and daylight saving is handled. `timeZone` is returned for clarity.
+
+**Status (QR-1, QR-10).** The stored `state` is `draft`, `live` or `paused`. `status` is worked out on every read and every scan, so a code never stays Active past its expiry and no scheduled job is needed:
+
+| `status` | When |
+|---|---|
+| `draft` | `state = draft` (saved, not turned on) |
+| `paused` | `state = paused` |
+| `scheduled` | live, and now < `activeFrom` |
+| `expired` | live, and `expiresAt` ≤ now |
+| `active` | live otherwise |
+
+### The short address (QR-2, QR-3), backend only
+
+Each new code gets a permanent `slug` (6 characters, without 0, O, 1 or I) and prints `https://go.tkp.example/{slug}`. **The domain is a placeholder** until TKP confirms it. The address never changes, so staff can change the destination or dates without reprinting.
+
+`GET https://go.tkp.example/{slug}` is public (no sign-in). It:
+- Reads the code and its dates **at request time**. Send `Cache-Control: no-store`, or a `max-age` of 60 or less, so a date change always takes effect.
+- Returns `302` to the destination URL when the code is `active`.
+- Returns `200` with the **inactive code page** (portal, PRD Q-8) when the code is `scheduled`, `paused`, `expired`, `draft`, deleted or unknown. The page shows a short message ("not active yet, starts …", "this code has ended" or "not active") and links to the guest form and Plan a Visit. It is never a blank error.
+- Counts the scan (QR-6) with **no personal data**: one counter per code, church date, service running at the time, and outcome (`inactive` true or false). It stores no IP address, device, cookie or location. Rate-limit per IP in memory only.
+- Takes "service at scan time" to be, in order:
+  1. an active special event whose dates include today;
+  2. a weekly service on today's weekday, from 60 minutes before its start to 2½ hours after;
+  3. none ("Outside service times").
+
+Legacy codes (QR-7) have no slug. Their printed address is today the church website form. At cutover it must redirect to the TKP Hub guest form (PRD transition plan, step 4). The backend or web host does that redirect, and counts it like any other scan.
+
+**Mock only:** `GET /public/qr/{slug}` backs the "Try a scan" demo button, which exists only in mock mode. It returns `{ "outcome": "redirect", "url" }` or `{ "outcome": "inactive", "reason", "startsAt", "links": [{ "label", "url" }] }`, where `reason` is `not_started`, `expired`, `paused`, `draft` or `unknown`. The real backend does not need it.
+
+**Destinations.** The portal base is a placeholder too.
+
+| `destination` | Opens |
+|---|---|
+| `guest_form` | `/welcome`, plus `?service={id}` when a service is linked |
+| `short_form` | `/welcome?form=short` |
+| `plan_visit` | `/plan-a-visit` |
+| `event` | `/events/{serviceId}` (a special event from §8) |
+| `course` | `/learn/courses/{courseId}` (a placeholder list until Grow, M8) |
+| `prayer_wall` | `/prayer` |
+
+### `GET /welcome/qr-codes`
+
+```json
+{
+  "items": [{
+    "id": "qr-2", "name": "Welcome desk table card",
+    "slug": "HELLO7", "shortUrl": "https://go.tkp.example/HELLO7", "legacy": false,
+    "destination": "guest_form", "targetId": null,
+    "destinationLabel": "Guest form", "destinationUrl": "https://hub.tkp.example/welcome",
+    "serviceId": null, "serviceName": null,
+    "activeFrom": "2026-10-04T13:00:00.000Z", "expiresAt": null, "timeZone": "America/Chicago",
+    "state": "live", "status": "active",
+    "note": "Two cards on each welcome desk.", "caption": "New here? Scan to say hello",
+    "createdAt": "…", "createdBy": "Esther Coleman", "updatedAt": "…", "updatedBy": null, "rowVer": 1,
+    "scans": { "total": 412, "last30": 35, "lastAt": "2026-11-22" },
+    "warnings": [{ "kind": "overlap", "otherId": "qr-1", "otherName": "Printed welcome code (church website)",
+                   "message": "“Printed welcome code (church website)” also opens Guest form at the same time." }]
+  }],
+  "counts": { "active": 2, "scheduled": 2, "paused": 1, "draft": 1, "expired": 1 },
+  "targets": { "event": [{ "id": "svc-5", "name": "168 Hours of Praise", "hint": "2027-01-03 to 2027-01-09" }],
+               "course": [{ "id": "crs-1", "name": "Foundation Class", "hint": "4 weeks" }] },
+  "services": [{ "id": "svc-1", "name": "Sunday 1st Service" }],
+  "can": { "manage": true, "print": true }
+}
+```
+
+- Items are sorted Active, Scheduled, Paused, Draft, Expired, then by name.
+- `scans` counts active scans only.
+- `can` tells the screen which buttons to show.
+- The front end refetches every minute, so a status change shows on screen.
+
+**Warnings (QR-8): warn, never block.** Warnings appear only on `active` and `scheduled` codes, and in the result of `check`:
+- **`overlap`:** another active or scheduled code has the same `destination` and `targetId`, and its time window overlaps. A window runs from `activeFrom` to `expiresAt`, open-ended when that is null.
+- **`expires_before_service`:** the linked service is still to come and the code expires first. For an `event` code, the event counts as the linked service.
+  - Weekly service: the code expires before the end of the next occurrence after max(now, `activeFrom`). A service counts as 2 hours long. The message reads "Stops working before the next …" or "Stops working during …".
+  - Special event with dates: the code expires before 23:59 church time on the event's last day.
+
+### `GET /welcome/qr-codes/{id}`
+
+Feeds the detail screen (QR-6):
+
+```json
+{
+  "code": { "…": "as in the list" },
+  "byDay": [{ "date": "2026-09-25", "scans": 0, "inactive": 0 }],
+  "byService": [{ "service": "Sunday 1st Service", "scans": 260 }, { "service": "Outside service times", "scans": 9 }],
+  "inactiveTotal": 3
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `byDay` | The last 60 church days, oldest first, including days with no scans |
+| `byService` | All time, busiest first |
+| `inactiveTotal` | Scans that reached the inactive page |
+
+404 `NOT_FOUND` when the code does not exist.
+
+### `POST /welcome/qr-codes` · `PUT /welcome/qr-codes/{id}`
+
+Body: `{ name, destination, targetId, serviceId, activeFrom, expiresAt, caption, note }`. `POST` also takes `draft` (true saves without turning the code on) and `legacyUrl` (registers a code that is already printed, QR-7). A legacy code is never a draft. `PUT` adds `rowVer`.
+
+- `POST` returns 201 `{ "code" }` with a new slug (legacy codes get none). A live code with no `activeFrom` starts now; a draft keeps it null.
+- `PUT` returns 200 `{ "code" }`. The slug never changes, so printed copies keep working (PRD 8.3). If nothing changed, nothing is audited.
+- `caption` is printed with the code. It defaults by destination, for example "New here? Scan to say hello".
+
+Audit actions:
+- `welcome.qr.create` and `welcome.qr.legacy`: `after` holds the name, destination, dates, state and `legacyUrl`.
+- `welcome.qr.update`: only the fields that changed (name, destination, service, activeFrom, expiresAt, note, caption).
+- `welcome.qr.renew`: an edit that moves an expired code's dates so it works again. QR-4 allows reactivating, and requires it to be logged.
+
+| Status | `code` | When |
+|---|---|---|
+| 409 | `NAME_TAKEN` | `fields.name`: another code already has this name, ignoring case |
+| 409 | `CONFLICT` | Stale `rowVer` |
+| 422 | `VALIDATION_FAILED` | Any of the field rules below |
+
+Field rules behind `VALIDATION_FAILED`:
+- `fields.name`: 2 to 60 characters.
+- `fields.destination`: one of the six destinations.
+- `fields.targetId`: an active special event, or a course.
+- `fields.serviceId`: a service that exists.
+- `fields.activeFrom`, `fields.expiresAt`: ISO instants, and **the expiry must come after the start**.
+- `fields.caption`: up to 60 characters.
+- `fields.note`: up to 500 characters.
+- `fields.legacyUrl`: an http or https URL that is not already registered.
+
+### `POST /welcome/qr-codes/check`
+
+Needs `qr.manage`. The body is the form so far, plus `id` when editing. Returns 200 `{ "warnings": [...] }`, computed as if the code were on. The form calls it 400 ms after people stop typing, so warnings show before they save.
+
+### `PUT /welcome/qr-codes/{id}/dates`
+
+The quick edit from the list (QR-4). It also backs the Extend buttons (+1 day, +1 week, +30 days), for a code that would expire during a live service (PRD 8.3).
+
+- Body: `{ "activeFrom", "expiresAt", "rowVer" }`. Returns 200 `{ "code" }`.
+- Audits `welcome.qr.dates` with the old and new dates, or `welcome.qr.renew` when an expired code works again.
+- Errors: 409 `CONFLICT`; 422 `VALIDATION_FAILED` (`fields.expiresAt`: "The expiry must be after the start").
+
+### `POST /welcome/qr-codes/{id}/publish` · `/pause` · `/resume`
+
+Body: `{ "rowVer" }`. Returns 200 `{ "code" }`.
+
+| Action | Effect | Audit |
+|---|---|---|
+| `publish` | Turns a draft on; the start is now if none was set | `welcome.qr.publish` |
+| `pause` | Stops a live code at once; scans see the inactive page. The screen offers Undo. | `welcome.qr.pause` |
+| `resume` | Switches a paused code back on | `welcome.qr.resume` |
+
+Each audit records `before: { state }` and `after: { state }`. Errors: 409 `CONFLICT`; 409 `NOT_LIVE` when pausing a draft.
+
+### `DELETE /welcome/qr-codes/{id}`
+
+Returns 200 `{ "deleted": true }`.
+- The address then shows the inactive page, and the scan counters are deleted with the code.
+- Audit `welcome.qr.delete`, with `before` holding the name, destination, dates and state.
+- 409 `LEGACY_CODE`: the code printed around the church today cannot be deleted, only paused.
+- The front end asks for confirmation first, in plain words.
+
+### `POST /welcome/qr-codes/print`
+
+Needs `qr.print`. Body: `{ "ids": ["qr-1", "qr-2"], "layout": "table_card", "copies": 2 }`, where `layout` is `poster`, `table_card`, `bulletin`, `sticker` or `plain`. Returns 200 `{ "logged": true }` and audits `welcome.qr.print` (category `exports`). 422 `VALIDATION_FAILED` for `fields.ids` or `fields.layout`.
+
+The sheets themselves (QR-5) are drawn by the front end as vector SVG on US Letter:
+- Each code uses error correction level H, with the logo, caption and short address.
+- The browser's print dialog saves a print-quality PDF.
+
+| Layout | Per page | Printed code size |
+|---|---|---|
+| Poster | 1 | 5.5 in |
+| Table card | 2 | 3 in |
+| Bulletin insert | 4 | 2 in |
+| Sticker | 12 | 1.5 in |
+| Plain | as many as fit | 0.75–4 in, chosen on screen |
+
+The screen warns when one square of a code would print smaller than 0.75 mm, and when a chosen code is not active. A server-side PDF generator (PRD Q-4, batch jobs) can replace this later without changing the screen.
+
+**Open questions:**
+- The domains for the short address and the portal.
+- The address on today's printed code (seeded as a placeholder).
+- Whether Tech Team should see QR codes.
+- The course list, which comes with Grow (M8).

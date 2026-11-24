@@ -79,3 +79,76 @@ describe("LCM report", () => {
     expect(addMonths("2025-12", 1)).toBe("2026-01");
   });
 });
+
+describe("LCM follow-up and growth (former suggested metrics)", () => {
+  const ratings = { Music: 9, Preaching: 9, Comfort: 8, Hospitality: 9, ChurchEnvironment: 9, ThePeople: 9, Parking: null, Traffic: null };
+  const guest = (serviceDate: string, connectId: number, extra: Partial<WelcomeEntry> = {}) =>
+    entry(serviceDate, "77494", { connectId, visitNumber: 1, submittedAt: `${serviceDate}T17:00:00Z`, phone: "(281) 555-0101", ageBracket: "26-30", ratings, ...extra });
+  const out = (r: ReturnType<typeof buildLcm>, key: string) => r.outcomes.find((o) => o.key === key)!;
+
+  it("48-hour contact counts the first call or message within 48 hours of the form", () => {
+    const logs = db.connectLogs.length;
+    const log = (connectId: number, savedAt: string) => db.connectLogs.push({ ...db.connectLogs[0]!, connectId, savedAt, lifeGroup: null });
+    log(900001, "2026-10-05T13:00:00Z"); // 20 h
+    log(900002, "2026-10-06T17:00:00Z"); // 48 h exactly: counts
+    log(900003, "2026-10-07T05:00:00Z"); // 60 h
+    try {
+      const list = [guest("2026-10-04", 900001), guest("2026-10-04", 900002), guest("2026-10-04", 900003), guest("2026-10-04", 900004)];
+      const o = out(buildLcm(list, { month: "2026-10" }, geo, NOW), "contact48h");
+      expect(o.cohort).toBe("2026-10");
+      expect(o.current).toEqual({ count: 2, of: 4, value: 50 });
+      expect(o.open).toBe(0);
+    } finally {
+      db.connectLogs.splice(logs);
+    }
+  });
+
+  it("a window still running is reported as open", () => {
+    const o = out(buildLcm([guest("2026-11-18", 900010)], { month: "2026-11" }, geo, NOW), "contact48h");
+    expect(o.current.count).toBe(0);
+    expect(o.open).toBe(1);
+  });
+
+  it("return within 30 days measures the previous month's first-time guests, at any service", () => {
+    const list = [
+      guest("2026-09-06", 900020),
+      guest("2026-09-27", 900020, { visitNumber: 2, serviceType: "Tuesday Bible Study" }),
+      guest("2026-09-13", 900021),
+      guest("2026-10-25", 900021, { visitNumber: 2 }), // 42 days later: not within 30
+    ];
+    const r = buildLcm(list, { month: "2026-10", type: "Sunday 1st Service" }, geo, NOW);
+    expect(out(r, "return30")).toMatchObject({ cohort: "2026-09", current: { count: 1, of: 2, value: 50 }, prior: { cohort: "2026-08" } });
+    expect(out(r, "return90")).toMatchObject({ cohort: "2026-07", current: { of: 0, value: null } });
+  });
+
+  it("guests per 100 attendees uses the month's service headcounts", () => {
+    const heads = db.attendance.filter((a) => a.date >= "2026-10-01" && a.date <= "2026-10-31").reduce((s, a) => s + a.headcount, 0);
+    const o = out(buildLcm([guest("2026-10-04", 900030), guest("2026-10-11", 900031), guest("2026-10-18", 900031, { visitNumber: 2 })], { month: "2026-10" }, geo, NOW), "per100");
+    expect(heads).toBeGreaterThan(0);
+    expect(o.unit).toBe("per 100");
+    expect(o.current).toEqual({ count: 2, of: heads, value: Math.round(2000 / heads) / 10 });
+  });
+
+  it("data completeness needs phone, ZIP and age; low ratings are 5 or below and name the area's department", () => {
+    const list = [
+      guest("2026-10-04", 900040),
+      guest("2026-10-04", 900041, { phone: null }),
+      guest("2026-10-04", 900042, { ratings: { ...ratings, Parking: 3 } }),
+      guest("2026-10-04", 900043, { ratings: { ...ratings, Parking: 5, Music: 4 } }),
+    ];
+    const r = buildLcm(list, { month: "2026-10" }, geo, NOW);
+    expect(out(r, "completeness").current).toEqual({ count: 3, of: 4, value: 75 });
+    expect(out(r, "completeness").breakdown).toContainEqual({ label: "Phone", count: 3, of: 4 });
+    const low = out(r, "lowRatings");
+    expect(low.higherIsBetter).toBe(false);
+    expect(low.current).toEqual({ count: 2, of: 4, value: 50 });
+    expect(low.breakdown![0]).toEqual({ label: "Parking", count: 2, of: 2, note: "Ushering / Protocol" });
+    expect(low.breakdown).toContainEqual({ label: "Music", count: 1, of: 4, note: "Choir / Music Ministry" });
+  });
+
+  it("returns every measure in a fixed order", () => {
+    expect(buildLcm([], {}, geo, NOW).outcomes.map((o) => o.key)).toEqual([
+      "contact48h", "return30", "return90", "cellPlacement", "conversion", "undecided", "per100", "completeness", "lowRatings",
+    ]);
+  });
+});

@@ -286,10 +286,20 @@ export function seedConnect() {
         r.coAttempts = 1;
         r.coLastCallOutcome = "Reached";
         r.itContacted = true;
+        // When the welcome call happened (LCM 48-hour contact rate). Worked out from the id, not
+        // rnd(), so the rest of the seed stays the same: five in six within 48 hours, the rest up to 4 days.
+        const coAuthor = staff(r.coMemberId);
+        r.checklist.CoWelcomeCall = { at: at(start, id % 6 === 0 ? 50 + ((id * 37) % 46) : 6 + ((id * 37) % 40)), byId: coAuthor.id, by: coAuthor.fullName };
         if (chance(0.55)) {
           r.status = "Completed";
           r.phase = 3;
           r.state.itMembership = "Interested";
+          // Two in three joined a cell group, recorded when Phase 1 finished (LCM cell placement rate).
+          if (id % 3 !== 0) {
+            const itAuthor = staff(r.itMemberId);
+            r.state.itLifeGroup = "Joined Cell Group";
+            r.checklist.P1Complete = { at: at(start, 24 * (9 + (id % 30))), byId: itAuthor.id, by: itAuthor.fullName };
+          }
         } else {
           r.status = "Closed";
           r.closedReason = pick(["Not interested (Church office)", "Not interested (Integration)", "Moved", "Unreachable", "Other"]);

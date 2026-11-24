@@ -58,3 +58,45 @@ export const serviceWeekday = (iso: string) => civilWeekday.format(civil(iso));
 
 /** "Nov 16 · 2:05 pm" in church time: when a log was saved or a box ticked. */
 export const formatStamp = (d: Date | string) => `${new Intl.DateTimeFormat("en-US", { timeZone: CHURCH_TZ, month: "short", day: "numeric" }).format(toDate(d))} · ${formatTime(d)}`;
+
+/* ------------------------------------------------------- church wall clock */
+
+const wallFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: CHURCH_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** "2026-12-20T18:00": the church's wall-clock time for a UTC instant (for datetime-local inputs). */
+export function toChurchLocal(d: Date | string): string {
+  const p = Object.fromEntries(wallFmt.formatToParts(toDate(d)).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+
+/** Minutes the church clock is ahead of UTC at an instant (−360 in winter, −300 in summer). */
+const offsetAt = (ms: number) => {
+  const local = toChurchLocal(new Date(ms));
+  const asUtc = Date.UTC(+local.slice(0, 4), +local.slice(5, 7) - 1, +local.slice(8, 10), +local.slice(11, 13), +local.slice(14, 16));
+  return Math.round((asUtc - Math.floor(ms / 60000) * 60000) / 60000);
+};
+
+/**
+ * "2026-12-20T18:00" church time → UTC ISO. Daylight saving is handled by
+ * re-reading the offset at the result (PRD: dates stored in UTC, shown in church time).
+ */
+export function fromChurchLocal(local: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local);
+  if (!m) throw new Error(`Not a local date-time: ${local}`);
+  const wall = Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!);
+  let ms = wall - offsetAt(wall) * 60000;
+  ms = wall - offsetAt(ms) * 60000;
+  return new Date(ms).toISOString();
+}
+
+/** "Dec 20, 2026 · 6:00 pm" in church time. */
+export const formatWhen = (d: Date | string) =>
+  `${new Intl.DateTimeFormat("en-US", { timeZone: CHURCH_TZ, month: "short", day: "numeric", year: "numeric" }).format(toDate(d))} · ${formatTime(d)}`;

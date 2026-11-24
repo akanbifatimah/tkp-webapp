@@ -84,11 +84,24 @@ describe("landing and navigation", () => {
     expect(landingPath("tkp_member")).toBe("/home");
   });
 
-  it("FI-07: a Welcome Team member sees only Overview and Guest lookup", () => {
+  it("FI-07: a Welcome Team member sees Overview and Guest lookup (plus QR codes, PRD 5.8)", () => {
     const perms = permissionsFor(["welcome_team"]);
     const nav = visibleNav((p) => perms.has(p));
     expect(nav.map((g) => g.id)).toEqual(["welcome"]);
-    expect(nav[0]?.tabs?.map((t) => t.label)).toEqual(["Overview", "Guest lookup"]);
+    expect(nav[0]?.tabs?.map((t) => t.label)).toEqual(["Overview", "Guest lookup", "QR codes"]);
+  });
+
+  it("M7 QR codes (PRD 5.8): admins and the integration lead manage, the welcome team prints, the pastor sees counts", () => {
+    for (const r of ["tech_admin", "church_admin", "integration_admin"] as Role[]) expect(can(r, "qr.manage")).toBe(true);
+    for (const r of ["welcome_lead", "welcome_team"] as Role[]) {
+      expect(can(r, "qr.print")).toBe(true);
+      expect(can(r, "qr.manage")).toBe(false);
+    }
+    for (const r of ["lead_pastor", "tech_team"] as Role[]) {
+      expect(can(r, "qr.view")).toBe(true);
+      expect(can(r, "qr.print")).toBe(false);
+    }
+    for (const r of ["church_office_admin", "church_office", "integration_team", "tkp_member"] as Role[]) expect(can(r, "qr.view")).toBe(false);
   });
 
   it("M6: Tech Admin and Church Admin land on the dashboard", () => {
@@ -102,11 +115,25 @@ describe("landing and navigation", () => {
       const perms = permissionsFor([role]);
       return visibleNav((p) => perms.has(p)).find((g) => g.id === "admin");
     };
-    expect(nav("tech_admin")?.tabs?.map((t) => t.label)).toEqual(["Users", "Roles", "Audit log", "Settings"]);
+    expect(nav("tech_admin")?.tabs?.map((t) => t.label)).toEqual(["Users", "Roles", "Cells and ZIPs", "Services", "Audit log", "Settings"]);
     expect(nav("tech_team")?.tabs?.map((t) => t.label)).toEqual(["Audit log"]);
     expect(nav("tech_team")?.to).toBe("/admin/audit");
-    expect(nav("church_admin")).toBeUndefined();
     expect(nav("lead_pastor")).toBeUndefined();
+  });
+
+  it("M7: Church Admin keeps services and the cell map; the integration lead keeps the cell map", () => {
+    const nav = (role: Role) => {
+      const perms = permissionsFor([role]);
+      return visibleNav((p) => perms.has(p)).find((g) => g.id === "admin");
+    };
+    expect(nav("church_admin")?.tabs?.map((t) => t.label)).toEqual(["Cells and ZIPs", "Services"]);
+    expect(nav("church_admin")?.to).toBe("/admin/cells");
+    expect(nav("integration_admin")?.tabs?.map((t) => t.label)).toEqual(["Cells and ZIPs"]);
+    for (const r of ["tech_team", "lead_pastor", "church_office_admin", "integration_team", "welcome_lead", "welcome_team"] as Role[]) {
+      expect(can(r, "config.cells")).toBe(false);
+      expect(can(r, "config.services")).toBe(false);
+    }
+    expect(can("integration_admin", "config.services")).toBe(false);
   });
 
   it("M6: only Tech Admin manages users and settings", () => {

@@ -4,7 +4,8 @@ import { can } from "@/lib/permissions";
 import { churchDate } from "@/lib/time";
 import type { Result } from "./connect-api";
 import { audit, db } from "./db";
-import { CELL_ZIPS, OUT_OF_AREA, type WelcomeEntry } from "./seed/guests";
+import { buildOutcomes } from "./lcm-outcomes";
+import { OUT_OF_AREA, type WelcomeEntry } from "./seed/guests";
 import type { StaffRecord } from "./seed/staff";
 import { kpis, membershipIntent } from "./welcome-api";
 
@@ -52,7 +53,7 @@ const DIM: Record<BreakdownDim, (e: WelcomeEntry) => string> = {
   MaritalStatus: (e) => ng(e.maritalStatus),
   ServiceType: (e) => ng(e.serviceType),
   City: (e) => ng(e.city),
-  CellGroup: (e) => (CELL_ZIPS[e.zip ?? ""] ? e.cellGroup : "N/A"),
+  CellGroup: (e) => (db.cellMap.zips[e.zip ?? ""] ? e.cellGroup : "N/A"),
   HowHeard: (e) => ng(e.howHeard),
   MembershipIntent: (e) => ng(membershipIntent(e)),
   WillComeAgain: (e) => (e.willComeAgain === "Maybe" ? "Maybe" : ng(e.willComeAgain)),
@@ -135,9 +136,10 @@ export function buildLcm(
   const zipRows = new Map<string, EmergingZip>();
   const last90Start = addDays(asOf, -89);
   const prior90Start = addDays(asOf, -179);
+  const cellZips = db.cellMap.zips;
   for (const e of all) {
     const z = e.zip;
-    if (!z || (!geo.has(z) && !CELL_ZIPS[z])) continue;
+    if (!z || (!geo.has(z) && !cellZips[z])) continue;
     if (e.serviceDate > asOf) continue;
     const pt = geo.get(z);
     const r =
@@ -146,8 +148,8 @@ export function buildLcm(
         zip: z,
         city: pt?.city ?? e.city,
         county: pt?.county ?? null,
-        cellGroup: CELL_ZIPS[z] ?? "N/A",
-        isEmerging: !CELL_ZIPS[z],
+        cellGroup: cellZips[z] ?? "N/A",
+        isEmerging: !cellZips[z],
         hasOutline: !!pt?.hasOutline,
         lat: pt?.lat ?? null,
         lon: pt?.lon ?? null,
@@ -262,6 +264,7 @@ export function buildLcm(
     serviceByDate: serviceByDate.sort((a, b) => a.date.localeCompare(b.date)),
     otherAnswers: [...others.entries()].map(([text, guests]) => ({ text, guests })).sort((a, b) => b.guests - a.guests),
     visitorCities: [...cities.values()].sort((a, b) => b.guests - a.guests),
+    outcomes: buildOutcomes({ entries, all, cur, pri, month, priorMonth, monthStart, asOf, priorStart, priorEnd, type: q.type || null, now }),
   };
 }
 

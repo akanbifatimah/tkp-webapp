@@ -6,7 +6,7 @@ import { Card, EmptyState, ErrorBanner, PageHeader, Skeleton } from "@/component
 import { cn } from "@/lib/cn";
 import { stagger } from "@/lib/motion";
 import { ROLE_LABEL, type ConnectTeam, type Role } from "@/lib/permissions";
-import { formatDay, formatTime } from "@/lib/time";
+import { formatDay, formatTime, formatWhen } from "@/lib/time";
 import { CATEGORIES, FIELD_LABEL, actionLabel, actionTone } from "./audit-labels";
 import { Pager, TEAM_NAME, selectClass } from "./parts";
 import { useAudit } from "./queries";
@@ -185,6 +185,8 @@ function show(key: string, v: unknown): string {
   if (key === "roles" && Array.isArray(v)) return v.map((r) => ROLE_LABEL[r as Role] ?? String(r)).join(", ");
   if (key === "connectTeam") return TEAM_NAME[v as ConnectTeam] ?? String(v);
   if (typeof v === "boolean") return v ? "Yes" : "No";
+  // QR dates are UTC instants: show them in church time (PRD 8.3).
+  if ((key === "activeFrom" || key === "expiresAt") && typeof v === "string") return formatWhen(v);
   if (Array.isArray(v)) return v.join(", ");
   return String(v);
 }

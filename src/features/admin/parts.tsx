@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Chip, type ChipTone } from "@/components/ui/Chip";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 import { ROLE_LABEL, type ConnectTeam, type Role } from "@/lib/permissions";
 import type { UserStatus } from "./types";
@@ -121,4 +122,39 @@ export function Pager({ page, pageSize, total, onPage }: { page: number; pageSiz
       </span>
     </nav>
   );
+}
+
+/** A small icon button for row actions. */
+export function IconAction({
+  label,
+  icon,
+  onClick,
+  disabled,
+  reason,
+  tone,
+}: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  reason?: string;
+  tone?: "crit" | "ok";
+}) {
+  const button = (
+    <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        title={disabled ? undefined : label}
+        className={cn(
+          "grid size-9 place-items-center rounded-xl text-muted transition-colors disabled:opacity-35 [&_svg]:size-4.5",
+          tone === "crit" ? "hover:bg-crit-soft hover:text-crit" : tone === "ok" ? "hover:bg-ok-soft hover:text-ok" : "hover:bg-cream-200 hover:text-maroon-700",
+        )}
+      >
+        {icon}
+    </button>
+  );
+  // A disabled control says why, in a tooltip keyboard users can reach too.
+  return disabled && reason ? <Tooltip label={reason}>{button}</Tooltip> : button;
 }

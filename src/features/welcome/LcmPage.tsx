@@ -9,10 +9,11 @@ import { cn } from "@/lib/cn";
 import { stagger } from "@/lib/motion";
 import { churchDate, serviceDateLong, serviceDateShort } from "@/lib/time";
 import { CellTiles } from "./OverviewPage";
-import type { BreakdownDim, LcmResponse } from "./lcm-types";
+import type { BreakdownDim, LcmOutcome, LcmResponse } from "./lcm-types";
 import { Map1, Map2, EmergingChip } from "./LcmMaps";
 import { Change, Columns, CompareCard, DataTable, GenderSplit, Gauge, HBars, Legend, Lines, Panel, PRIOR, RatingChange, ReportSection, S1, S2, S3, Spark, StatTile } from "./lcm-parts";
-import { CELLS, KNOWN_TYPES, OTHER_TYPE_COLOR, SERVICE_TYPES, WELCOME_TAGLINE, pct, pctChange } from "./model";
+import { useServiceOptions } from "@/features/admin/config-queries";
+import { CELLS, OTHER_TYPE_COLOR, SERVICE_TYPES, WELCOME_TAGLINE, pct, pctChange } from "./model";
 import { useLcm } from "./queries";
 
 /**
@@ -36,20 +37,11 @@ const HOW_OTHER: Record<string, string> = { youtube: "▶️", "drove by": "🚗
 const RATING_ICON: Record<string, string> = { Music: "🎼", Preaching: "🎤", Comfort: "💺", Hospitality: "😀", "Church environment": "⛪", "The people": "👥", Parking: "🚗", Traffic: "🚦" };
 const AGE_ORDER = ["Below 16", "16-20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-65", "Above 65", "Not given"];
 
-const IDEAS = [
-  ["48-hour contact rate", "Share of guests contacted within 48 hours of the form.", "Connect first contact"],
-  ["Return-visit rate (30 / 90 days)", "Guests confirmed back within 30 or 90 days.", "Connect “Returned for 2nd visit”"],
-  ["Guest → member conversion", "Guests who joined orientation or became members, by first-visit cohort.", "Member database"],
-  ["Cell placement rate", "Guests placed in a cell or life group within 4 weeks.", "Connect Life Group outcome"],
-  ["“Undecided” follow-through", "Guests who were undecided about membership and later said yes.", "Connect outcomes"],
-  ["Guests per 100 attendees", "First-time guests against total service attendance.", "Service headcount (not collected yet)"],
-  ["Data completeness", "Share of forms with phone, zip and age filled in.", "Welcome form data"],
-  ["Low-rating alerts", "Any guest who rated 5 or below, routed to the department head.", "Ratings"],
-];
 
 export function LcmPage() {
   const [month, setMonth] = useState<string | undefined>(undefined);
   const [type, setType] = useState<string>("");
+  const serviceOptions = useServiceOptions();
   const q = useLcm(month, type || undefined);
   const d = q.data;
   const toast = useToast();
@@ -128,8 +120,10 @@ export function LcmPage() {
           <span className="text-xs font-extrabold tracking-wide text-muted uppercase">Service type</span>
           <select value={type} onChange={(e) => setType(e.target.value)} className="h-11 min-w-52 rounded-xl border border-line bg-white px-3 text-sm font-bold text-ink shadow-card">
             <option value="">All services</option>
-            {KNOWN_TYPES.map((t) => (
-              <option key={t}>{t}</option>
+            {serviceOptions.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.retired ? `${t.name} (retired)` : t.name}
+              </option>
             ))}
           </select>
         </label>
@@ -533,17 +527,93 @@ function Report({ d, fetching }: { d: LcmResponse; fetching: boolean }) {
         <Insights d={d} label={label} mName={mName} pName={pName} m12={m12} howTot={howTot} tser={tser} dates={dates} ratings={ratings} />
       </ReportSection>
 
-      <ReportSection title="Suggested metrics to add" sub="These need Connect data or a small new table.">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-noprint>
-          {IDEAS.map(([t, body, src]) => (
-            <div key={t} className="rounded-2xl border border-dashed border-gold-400 bg-gold-100/40 p-4">
-              <b className="text-ink">{t}</b>
-              <p className="mt-1 text-sm text-muted">{body}</p>
-              <p className="mt-2 text-xs font-semibold text-gold-800">Source: {src}</p>
-            </div>
-          ))}
-        </div>
+      <ReportSection title="Follow-up and growth" sub="What happened after the first visit. First-time guests only, totals only.">
+        <Outcomes items={d.outcomes} month={d.meta.month} />
       </ReportSection>
+    </div>
+  );
+}
+
+/* ================================================================= follow-up and growth */
+
+const BREAKDOWN_HEAD: Partial<Record<LcmOutcome["key"], [string, string]>> = {
+  lowRatings: ["Area · alert goes to", "Rated ≤ 5 / rated"],
+  completeness: ["Filled in", "Forms"],
+};
+const NOUN: Partial<Record<LcmOutcome["key"], string>> = { completeness: "forms", lowRatings: "guests who rated" };
+
+function Outcomes({ items, month }: { items: LcmOutcome[]; month: string }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {items.map((o) => (
+        <OutcomeCard key={o.key} o={o} month={month} />
+      ))}
+    </div>
+  );
+}
+
+function OutcomeCard({ o, month }: { o: LcmOutcome; month: string }) {
+  const per100 = o.unit === "per 100";
+  const fmt = (v: number | null) => (v === null ? "—" : per100 ? v.toFixed(1) : `${Math.round(v)}%`);
+  const diff = o.current.value !== null && o.prior.value !== null ? o.current.value - o.prior.value : null;
+  const good = diff === null || Math.abs(diff) < 0.5 ? null : diff > 0 === o.higherIsBetter;
+  return (
+    <div className="flex min-w-0 flex-col rounded-2xl border border-white bg-white p-4 shadow-card">
+      <b className="text-ink">{o.label}</b>
+      <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="font-display text-[32px] leading-none font-semibold text-maroon-900 tabular">{fmt(o.current.value)}</span>
+        <span className="text-sm font-semibold text-muted">
+          {per100 ? "per 100 attendees" : `${o.current.count} of ${o.current.of} ${NOUN[o.key] ?? "guests"}`}
+        </span>
+      </p>
+      <p className="mt-1.5 flex flex-wrap items-baseline gap-1.5 text-xs font-semibold text-muted">
+        {diff === null ? (
+          <span>No figure for {ym(o.prior.cohort)}</span>
+        ) : (
+          <>
+            <span className={cn("font-bold", good === null ? "text-muted" : good ? "text-ok" : "text-crit")}>
+              {Math.abs(diff) < 0.5 ? "■ no change" : `${diff > 0 ? "▲" : "▼"} ${Math.abs(diff).toFixed(per100 ? 1 : 0)}${per100 ? "" : " pts"}`}
+            </span>
+            <span>
+              vs {fmt(o.prior.value)} in {ym(o.prior.cohort)}
+            </span>
+          </>
+        )}
+      </p>
+      <p className="mt-3 text-sm text-muted">{o.measures}</p>
+      {o.cohort !== month ? (
+        <p className="mt-1.5 text-xs font-semibold text-maroon-700">Guests who first came in {ym(o.cohort)}, so the window has had time to close.</p>
+      ) : null}
+      {o.open > 0 ? (
+        <p className="mt-1.5 text-xs font-semibold text-gold-800">
+          Still open for {o.open} {o.open === 1 ? "guest" : "guests"}: this can still go up.
+        </p>
+      ) : null}
+      {o.breakdown?.length ? (
+        <ul className="mt-3 space-y-1 border-t border-line pt-2 text-xs">
+          {BREAKDOWN_HEAD[o.key] ? (
+            <li className="flex justify-between gap-3 font-bold tracking-wide text-muted uppercase">
+              <span>{BREAKDOWN_HEAD[o.key]![0]}</span>
+              <span>{BREAKDOWN_HEAD[o.key]![1]}</span>
+            </li>
+          ) : null}
+          {o.breakdown.map((b) => (
+            <li key={b.label} className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0 truncate font-semibold text-ink">
+                {b.label}
+                {b.note ? <span className="font-normal text-muted"> · {b.note}</span> : null}
+              </span>
+              <span className="shrink-0 font-bold text-ink tabular">
+                {b.count.toLocaleString()}
+                {b.of ? <span className="font-semibold text-muted"> / {b.of}</span> : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : o.key === "lowRatings" ? (
+        <p className="mt-3 border-t border-line pt-2 text-xs text-muted">No low ratings this month.</p>
+      ) : null}
+      <p className="mt-auto pt-3 text-xs font-semibold text-gold-800">Source: {o.source}</p>
     </div>
   );
 }

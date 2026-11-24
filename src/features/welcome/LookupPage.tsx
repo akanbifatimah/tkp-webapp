@@ -8,7 +8,8 @@ import { cn } from "@/lib/cn";
 import { fadeUp, stagger } from "@/lib/motion";
 import { serviceDateLong, serviceDateShort } from "@/lib/time";
 import { GuestDrawer } from "./GuestDrawer";
-import { CELLS, KNOWN_TYPES, WELCOME_TAGLINE } from "./model";
+import { useServiceOptions } from "@/features/admin/config-queries";
+import { CELLS, WELCOME_TAGLINE } from "./model";
 import { CellChip, LogFollowUpLink, MemberChip, ViewEntryButton } from "./parts";
 import { useGuestSearch, useServiceDates } from "./queries";
 import type { GuestItem, GuestSearch } from "./types";
@@ -21,6 +22,7 @@ export function LookupPage() {
   const [phone, setPhone] = useState(params.get("phone") ?? "");
   const [name, setName] = useState(params.get("name") ?? "");
   const [filters, setFilters] = useState({ date: "", cell: "", type: "", member: "" });
+  const serviceOptions = useServiceOptions();
   // Text boxes wait 350 ms after typing stops; filters search at once (as the live page).
   const [typed, setTyped] = useState({ phone, name });
   useEffect(() => {
@@ -93,8 +95,10 @@ export function LookupPage() {
           </Filter>
           <Filter label="Service type" value={filters.type} onChange={(v) => setFilters((f) => ({ ...f, type: v }))}>
             <option value="">Any service</option>
-            {KNOWN_TYPES.map((t) => (
-              <option key={t}>{t}</option>
+            {serviceOptions.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.retired ? `${t.name} (retired)` : t.name}
+              </option>
             ))}
           </Filter>
           <Filter label="Become a member?" value={filters.member} onChange={(v) => setFilters((f) => ({ ...f, member: v }))}>

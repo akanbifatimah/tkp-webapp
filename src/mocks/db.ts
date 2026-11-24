@@ -1,6 +1,10 @@
 import type { LogRow } from "@/features/connect/types";
+import { seedAttendance, type AttendanceRow } from "./seed/attendance";
 import { seedAudit } from "./seed/audit";
-import { seedConnect, type ConnectRecord, type WelcomeEntry } from "./seed/guests";
+import type { CellName } from "@/features/admin/config-types";
+import { CELL_ZIPS, seedConnect, type ConnectRecord, type WelcomeEntry } from "./seed/guests";
+import { seedQr, type QrRecord, type QrScanRow } from "./seed/qr";
+import { seedServices, type ServiceRecord } from "./seed/services";
 import { STAFF, type StaffRecord } from "./seed/staff";
 
 /**
@@ -31,6 +35,7 @@ export type SettingsRecord = {
 };
 
 const seeded = seedConnect();
+const qr = seedQr();
 const staff = STAFF.map((s) => ({ ...s, roles: [...s.roles] })) as StaffRecord[];
 
 export const db = {
@@ -59,6 +64,20 @@ export const db = {
   connectLogs: seeded.logs as LogRow[],
   /** Every welcome-form entry (TKP Connect vw_WelcomeGuest), one per person per service date (BR-02). */
   entries: seeded.entries as WelcomeEntry[],
+  /** ZIP → cell group (PRD W-12). Editable in Admin › Cells and ZIPs; one rowVer for the whole map. */
+  cellMap: {
+    zips: { ...CELL_ZIPS } as Record<string, CellName>,
+    rowVer: 1,
+    updatedAt: null as string | null,
+    updatedById: null as string | null,
+  },
+  /** Services and special events (PRD W-13). */
+  services: seedServices() as ServiceRecord[],
+  /** QR codes (PRD 5.8) and their scan counts (QR-6, no personal data). */
+  qrCodes: qr.codes as QrRecord[],
+  qrScans: qr.scans as QrScanRow[],
+  /** Service headcounts (LCM guests per 100 attendees). A new table: TKP does not collect these yet. */
+  attendance: seedAttendance() as AttendanceRow[],
 };
 
 /** Every sign-in, search, guest view, assignment, save and admin change is audited (FI-09, PRD F-5). */

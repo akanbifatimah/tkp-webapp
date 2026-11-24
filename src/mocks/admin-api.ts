@@ -235,7 +235,7 @@ export const AUDIT_CATEGORY: Record<AuditCategory, (action: string) => boolean> 
   connect: (a) => a.startsWith("connect."),
   users: (a) => a.startsWith("user."),
   settings: (a) => a.startsWith("settings."),
-  exports: (a) => a.endsWith(".export"),
+  exports: (a) => a.endsWith(".export") || a === "welcome.qr.print",
 };
 
 const nameOf = (id: string | null) => (id ? (db.staff.find((s) => s.id === id)?.fullName ?? null) : null);
@@ -256,6 +256,16 @@ function targetLabel(r: AuditRow): string | null {
     }
   }
   if (r.action === "welcome.view" || r.action.startsWith("welcome.entry")) return `Guest #${r.target}`;
+  if (r.action.startsWith("welcome.cellmap.")) return `ZIP ${r.target}`;
+  if (r.action === "welcome.service.reorder") return "Guest form services";
+  if (r.action.startsWith("welcome.service.")) {
+    const name = db.services.find((s) => s.id === r.target)?.name ?? (r.meta?.before?.name as string | undefined) ?? (r.meta?.after?.name as string | undefined);
+    return name ?? r.target;
+  }
+  if (r.action.startsWith("welcome.qr.")) {
+    const name = db.qrCodes.find((c) => c.id === r.target)?.name ?? (r.meta?.before?.name as string | undefined) ?? (r.meta?.after?.name as string | undefined);
+    return name ?? r.target;
+  }
   if (r.action.startsWith("connect.") && /^\d+$/.test(r.target)) return `Connect #${r.target}`;
   return r.target;
 }

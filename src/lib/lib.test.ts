@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { safeNext } from "@/features/auth/auth";
 import { parseError } from "./api";
-import { churchDate, formatDay, formatTime } from "./time";
+import { churchDate, formatDay, formatTime, fromChurchLocal, toChurchLocal } from "./time";
 
 describe("API error envelope", () => {
   it("reads { error: { code, message, fields } }", async () => {
@@ -48,5 +48,17 @@ describe("return-to page after sign-in (UI-G6)", () => {
     expect(safeNext("/\\evil.example.com")).toBeNull();
     expect(safeNext("/sign-in")).toBeNull();
     expect(safeNext(null)).toBeNull();
+  });
+});
+
+describe("church wall clock (QR dates, PRD 8.3 edge cases)", () => {
+  it("converts both ways, across daylight saving", () => {
+    expect(fromChurchLocal("2026-12-20T18:00")).toBe("2026-12-21T00:00:00.000Z"); // CST, UTC−6
+    expect(fromChurchLocal("2026-07-05T09:30")).toBe("2026-07-05T14:30:00.000Z"); // CDT, UTC−5
+    expect(toChurchLocal("2026-12-21T00:00:00Z")).toBe("2026-12-20T18:00");
+    // The night the clocks go back (Nov 1, 2026): 9 am is after the change.
+    expect(fromChurchLocal("2026-11-01T09:00")).toBe("2026-11-01T15:00:00.000Z");
+    expect(fromChurchLocal("2026-03-08T09:00")).toBe("2026-03-08T14:00:00.000Z");
+    for (const iso of ["2026-03-08T14:00:00.000Z", "2026-11-01T15:00:00.000Z", "2027-01-01T05:59:00.000Z"]) expect(fromChurchLocal(toChurchLocal(iso))).toBe(iso);
   });
 });

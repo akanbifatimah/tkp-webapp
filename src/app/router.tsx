@@ -20,6 +20,8 @@ import { CHANGE_PASSWORD_PATH, RequireAuth, RequirePermission } from "./guards";
 const OverviewPage = lazy(() => import("@/features/welcome/OverviewPage").then((m) => ({ default: m.OverviewPage })));
 const LookupPage = lazy(() => import("@/features/welcome/LookupPage").then((m) => ({ default: m.LookupPage })));
 const LcmPage = lazy(() => import("@/features/welcome/LcmPage").then((m) => ({ default: m.LcmPage })));
+const QrCodesPage = lazy(() => import("@/features/welcome/QrCodesPage").then((m) => ({ default: m.QrCodesPage })));
+const QrPrintPage = lazy(() => import("@/features/welcome/QrPrintPage").then((m) => ({ default: m.QrPrintPage })));
 const QueuePage = lazy(() => import("@/features/connect/QueuePage").then((m) => ({ default: m.QueuePage })));
 const LogPage = lazy(() => import("@/features/connect/LogPage").then((m) => ({ default: m.LogPage })));
 const ScriptsPage = lazy(() => import("@/features/connect/ScriptsPage").then((m) => ({ default: m.ScriptsPage })));
@@ -31,6 +33,8 @@ const DashboardPage = lazy(() => import("@/features/admin/DashboardPage").then((
 const UsersPage = lazy(() => import("@/features/admin/UsersPage").then((m) => ({ default: m.UsersPage })));
 const RolesPage = lazy(() => import("@/features/admin/RolesPage").then((m) => ({ default: m.RolesPage })));
 const AuditPage = lazy(() => import("@/features/admin/AuditPage").then((m) => ({ default: m.AuditPage })));
+const CellsPage = lazy(() => import("@/features/admin/CellsPage").then((m) => ({ default: m.CellsPage })));
+const ServicesPage = lazy(() => import("@/features/admin/ServicesPage").then((m) => ({ default: m.ServicesPage })));
 const SettingsPage = lazy(() => import("@/features/admin/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const UiKitPage = lazy(() => import("@/features/dev/UiKitPage").then((m) => ({ default: m.UiKitPage })));
 
@@ -96,6 +100,8 @@ export const router = createBrowserRouter([
           { index: true, element: <AdminIndex /> },
           { path: "users", element: page("admin.users", <UsersPage />) },
           { path: "roles", element: page("admin.users", <RolesPage />) },
+          { path: "cells", element: page("config.cells", <CellsPage />) },
+          { path: "services", element: page("config.services", <ServicesPage />) },
           { path: "audit", element: page("admin.audit", <AuditPage />) },
           { path: "settings", element: page("admin.settings", <SettingsPage />) },
         ],
@@ -107,6 +113,8 @@ export const router = createBrowserRouter([
           { index: true, element: page("welcome.overview.view", <OverviewPage />) },
           { path: "lookup", element: page("welcome.lookup.view", <LookupPage />) },
           { path: "lcm", element: page("welcome.lcm.view", <LcmPage />) },
+          { path: "qr", element: page("qr.view", <QrCodesPage />) },
+          { path: "qr/print", element: page("qr.print", <QrPrintPage />) },
         ],
       },
       {
@@ -124,7 +132,7 @@ export const router = createBrowserRouter([
         ],
       },
       ...laterRoutes,
-      ...(env.useMocks
+      ...(env.showUiKit
         ? [
             {
               path: "dev/ui",

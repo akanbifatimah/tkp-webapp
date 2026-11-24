@@ -33,6 +33,12 @@ export function Dialog({
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // Callers often pass a new onClose each render; keep the latest without
+  // re-running the open effect (which would move focus while someone types).
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -40,12 +46,16 @@ export function Dialog({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     // A marked control first (e.g. Done), else the first button.
-    const t = window.setTimeout(() => (panel.current?.querySelector<HTMLElement>("[data-autofocus]") ?? panel.current?.querySelector<HTMLElement>("button"))?.focus(), 30);
+    const t = window.setTimeout(() => {
+      // Never pull focus out of a confirmation opened on top in the meantime.
+      if (document.activeElement?.closest('[role="alertdialog"]')) return;
+      (panel.current?.querySelector<HTMLElement>("[data-autofocus]") ?? panel.current?.querySelector<HTMLElement>("button"))?.focus();
+    }, 30);
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        closeRef.current();
       }
       if (e.key === "Tab" && panel.current) {
         const items = [...panel.current.querySelectorAll<HTMLElement>("a[href],button:not(:disabled),input:not(:disabled),select,textarea,[tabindex]:not([tabindex='-1'])")];
@@ -68,7 +78,7 @@ export function Dialog({
       document.body.style.overflow = previousOverflow;
       opener?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return createPortal(
     <AnimatePresence>

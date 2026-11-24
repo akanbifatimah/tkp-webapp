@@ -63,6 +63,8 @@ export const NAV: NavGroup[] = [
       { label: "Overview", to: "/welcome", permission: "welcome.overview.view", end: true },
       { label: "Guest lookup", to: "/welcome/lookup", permission: "welcome.lookup.view" },
       { label: "LCM Metrics", to: "/welcome/lcm", permission: "welcome.lcm.view" },
+      // PRD 5.8: QR codes sit under Welcome (the welcome team prints them).
+      { label: "QR codes", to: "/welcome/qr", permission: "qr.view" },
     ],
   },
   {
@@ -100,6 +102,8 @@ export const NAV: NavGroup[] = [
     tabs: [
       { label: "Users", to: "/admin/users", permission: "admin.users" },
       { label: "Roles", to: "/admin/roles", permission: "admin.users" },
+      { label: "Cells and ZIPs", to: "/admin/cells", permission: "config.cells" },
+      { label: "Services", to: "/admin/services", permission: "config.services" },
       { label: "Audit log", to: "/admin/audit", permission: "admin.audit" },
       { label: "Settings", to: "/admin/settings", permission: "admin.settings" },
     ],

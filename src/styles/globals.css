@@ -164,9 +164,12 @@ body {
     linear-gradient(180deg, #680d11 0%, #4a0b0e 55%, #2f0d0b 100%);
 }
 
-/* Subtle film grain for depth */
-.grain {
-  position: relative;
+/* Subtle film grain for depth. In the components layer so a utility such as
+   `sticky` (the desktop sidebar) still wins over this `relative`. */
+@layer components {
+  .grain {
+    position: relative;
+  }
 }
 .grain::after {
   content: "";
@@ -228,6 +231,33 @@ body {
   }
   html.print-entry [data-dialog-root] [role="dialog"] > div {
     overflow: visible;
+  }
+}
+
+/* QR code sheets (PRD QR-5): only the sheets print, on US Letter with no margin. */
+.qr-print-root {
+  display: none;
+}
+@page qr-sheet {
+  size: letter;
+  margin: 0;
+}
+@media print {
+  html.print-qr,
+  html.print-qr body {
+    background: #fff;
+  }
+  html.print-qr body > *:not(.qr-print-root) {
+    display: none !important;
+  }
+  html.print-qr .qr-print-root {
+    display: block;
+  }
+  html.print-qr .qr-sheet {
+    page: qr-sheet;
+    break-after: page;
+    box-shadow: none;
+    print-color-adjust: exact;
   }
 }
 

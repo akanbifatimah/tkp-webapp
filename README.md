@@ -29,6 +29,7 @@ In mock mode the sign-in page has a **Demo accounts** list with one fictional pe
 |---|---|---|
 | `VITE_API_BASE_URL` | `/api/v1` | Base URL of the API |
 | `VITE_USE_MOCKS` | `true` | `true` = the MSW mock API answers in the browser; `false` = call the real backend |
+| `VITE_SHOW_UI_KIT` | `false` | `true` = show the developer UI kit (`/dev/ui`) in the sidebar. Ignored when mocks are off |
 
 `VITE_*` values are baked in at **build** time. Set them before building, and rebuild after changing them.
 

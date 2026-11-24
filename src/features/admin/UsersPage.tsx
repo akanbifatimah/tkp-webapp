@@ -1,18 +1,17 @@
 import { KeyRound, LogOut, Pencil, Search, UserCheck, UserPlus, UserX, Users } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Card, EmptyState, ErrorBanner, PageHeader, Skeleton } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/Toast";
-import { Tooltip } from "@/components/ui/Tooltip";
 import { useAuth } from "@/features/auth/auth";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { stagger } from "@/lib/motion";
 import { ROLES, ROLE_LABEL, type Role } from "@/lib/permissions";
 import { formatStamp } from "@/lib/time";
-import { Initials, Pager, RoleChips, STATUS, StatusChip, TEAM_NAME, selectClass } from "./parts";
+import { IconAction, Initials, Pager, RoleChips, STATUS, StatusChip, TEAM_NAME, selectClass } from "./parts";
 import { useResetPassword, useSetActive, useSignOutEverywhere, useUsers } from "./queries";
 import { TempPasswordDialog, UserDialog } from "./UserDialog";
 import type { AdminUser, TempPasswordResponse, UserStatus } from "./types";
@@ -317,38 +316,4 @@ function RowActions({ u, onEdit, actions }: { u: AdminUser; onEdit: () => void; 
       )}
     </span>
   );
-}
-
-function IconAction({
-  label,
-  icon,
-  onClick,
-  disabled,
-  reason,
-  tone,
-}: {
-  label: string;
-  icon: ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  reason?: string;
-  tone?: "crit" | "ok";
-}) {
-  const button = (
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label={label}
-        title={disabled ? undefined : label}
-        className={cn(
-          "grid size-9 place-items-center rounded-xl text-muted transition-colors disabled:opacity-35 [&_svg]:size-4.5",
-          tone === "crit" ? "hover:bg-crit-soft hover:text-crit" : tone === "ok" ? "hover:bg-ok-soft hover:text-ok" : "hover:bg-cream-200 hover:text-maroon-700",
-        )}
-      >
-        {icon}
-      </button>
-  );
-  // A disabled control says why, in a tooltip keyboard users can reach too.
-  return disabled && reason ? <Tooltip label={reason}>{button}</Tooltip> : button;
 }

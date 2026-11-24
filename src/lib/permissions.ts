@@ -83,6 +83,13 @@ export const PERMISSIONS = [
   "admin.users",
   "admin.audit",
   "admin.settings",
+  // M7 configuration (PRD W-12, W-13, IL-5, CA-2)
+  "config.cells",
+  "config.services",
+  // M7 QR codes (PRD 5.8): see and count, print, create and change
+  "qr.view",
+  "qr.print",
+  "qr.manage",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -96,6 +103,12 @@ const CONNECT_TABS: Permission[] = [
   "connect.phaseBoard.view",
   "connect.metrics.view",
 ];
+/**
+ * PRD 5.8: church_admin and the integration lead create and edit; the welcome
+ * team views and prints; the pastor sees scan counts only.
+ */
+const QR_MANAGE: Permission[] = ["qr.view", "qr.print", "qr.manage"];
+const QR_PRINT: Permission[] = ["qr.view", "qr.print"];
 const LATER_ALL: Permission[] = ["grow.view", "care.view", "serve.view", "lead.view", "go.view", "transform.view"];
 
 /**
@@ -106,16 +119,17 @@ const LATER_ALL: Permission[] = ["grow.view", "care.view", "serve.view", "lead.v
 const EXPORT: Permission[] = ["welcome.export"];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  tech_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit", "admin.settings"],
-  tech_team: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.audit"],
-  lead_pastor: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL],
-  church_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL],
+  tech_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit", "admin.settings", "config.cells", "config.services", ...QR_MANAGE],
+  tech_team: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.audit", "qr.view"],
+  lead_pastor: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "qr.view"],
+  church_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "config.cells", "config.services", ...QR_MANAGE],
   church_office_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view"],
   church_office: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view"],
-  integration_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS],
+  // PRD IL-5 / IL-6: the integration lead keeps the cell and ZIP map.
+  integration_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "config.cells", ...QR_MANAGE],
   integration_team: ["welcome.overview.view", "welcome.lookup.view", ...CONNECT_TABS],
-  welcome_lead: [...WELCOME_ALL, ...EXPORT, "connect.journey.view"],
-  welcome_team: ["welcome.overview.view", "welcome.lookup.view", "connect.journey.view"],
+  welcome_lead: [...WELCOME_ALL, ...EXPORT, "connect.journey.view", ...QR_PRINT],
+  welcome_team: ["welcome.overview.view", "welcome.lookup.view", "connect.journey.view", ...QR_PRINT],
   tkp_member: ["member.home", "belong.view", ...LATER_ALL],
   // PRD roles: their module keys arrive with Part 2.
   registrar: ["grow.view"],
@@ -203,13 +217,13 @@ export const ROLE_SUMMARY: Record<Role, string> = {
   tech_admin: "Everything, including users, audit log and settings. Saves logs for guests assigned to them.",
   tech_team: "Sees every module to support and test it. Reads the audit log. Cannot save or assign.",
   lead_pastor: "Sees Welcome and both Connect teams; assigns guests and saves logs for guests assigned to them.",
-  church_admin: "Church dashboard, Welcome and both Connect teams; assigns guests. Never saves logs.",
+  church_admin: "Church dashboard, Welcome and both Connect teams; assigns guests; keeps the services, cell map and QR codes. Never saves logs.",
   church_office_admin: "Leads the Church Office team: sees and assigns the team's guests.",
   church_office: "Church Office caller: works the guests assigned to them.",
-  integration_admin: "Leads the Integration Team: sees and assigns the team's guests.",
+  integration_admin: "Leads the Integration Team: sees and assigns the team's guests; keeps the cell map and QR codes.",
   integration_team: "Integration caller: works the guests assigned to them.",
-  welcome_lead: "Welcome overview, guest lookup and LCM Metrics; exports guest PDFs.",
-  welcome_team: "Welcome overview and guest lookup.",
+  welcome_lead: "Welcome overview, guest lookup and LCM Metrics; exports guest PDFs; prints QR codes.",
+  welcome_team: "Welcome overview and guest lookup; prints QR codes.",
   tkp_member: "Member home only. No staff areas.",
   registrar: "Owns courses, exams, results and students (Grow, coming in M8).",
   course_author: "Builds the courses and exams the Registrar assigns (M8).",
@@ -243,4 +257,9 @@ export const PERMISSION_LABEL: Record<Permission, { area: string; label: string 
   "admin.users": { area: "Admin", label: "Users and roles" },
   "admin.audit": { area: "Admin", label: "Audit log" },
   "admin.settings": { area: "Admin", label: "Settings" },
+  "config.cells": { area: "Admin", label: "Cells and ZIPs" },
+  "config.services": { area: "Admin", label: "Services" },
+  "qr.view": { area: "Welcome", label: "QR codes and scan counts" },
+  "qr.print": { area: "Welcome", label: "Print QR codes" },
+  "qr.manage": { area: "Welcome", label: "Create and change QR codes" },
 };

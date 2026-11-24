@@ -14,7 +14,9 @@ import type {
   SaveLogResponse,
 } from "@/features/connect/types";
 import type { FeatureCollection, Geometry } from "geojson";
+import type { CellMapResponse, CellName, Service, ServiceInput, ServicesResponse, SetZipResponse } from "@/features/admin/config-types";
 import type { LcmResponse } from "@/features/welcome/lcm-types";
+import type { PrintLayout, QrCode, QrDatesInput, QrDetail, QrInput, QrListResponse, QrResolve, QrWarning } from "@/features/welcome/qr-types";
 import type { GuestRecord, GuestSearch, GuestSearchResponse, OverviewResponse, Scope } from "@/features/welcome/types";
 import type {
   AdminSettings,
@@ -192,6 +194,36 @@ export const api = {
     audit: (q: AuditQuery, signal?: AbortSignal) => request<AuditResponse>("/admin/audit", { query: q, signal }),
     settings: (signal?: AbortSignal) => request<{ settings: AdminSettings }>("/admin/settings", { signal }),
     saveSettings: (body: SettingsInput) => request<{ settings: AdminSettings }>("/admin/settings", { method: "PUT", body }),
+  },
+  /** M7 configuration: cell and ZIP map (PRD W-12), services and special events (W-13). docs/API.md §8. */
+  config: {
+    cellMap: (signal?: AbortSignal) => request<CellMapResponse>("/welcome/cell-map", { signal }),
+    setZip: (zip: string, cell: CellName, rowVer: number) => request<SetZipResponse>(`/welcome/cell-map/zips/${zip}`, { method: "PUT", body: { cell, rowVer } }),
+    removeZip: (zip: string, rowVer: number) => request<SetZipResponse>(`/welcome/cell-map/zips/${zip}`, { method: "DELETE", query: { rowVer } }),
+    services: (signal?: AbortSignal) => request<ServicesResponse>("/welcome/services", { signal }),
+    createService: (body: ServiceInput) => request<{ service: Service }>("/welcome/services", { body }),
+    updateService: (id: string, body: ServiceInput & { rowVer: number }) =>
+      request<{ service: Service; renamedEntries: number }>(`/welcome/services/${id}`, { method: "PUT", body }),
+    retireService: (id: string) => request<{ service: Service }>(`/welcome/services/${id}/retire`, { method: "POST" }),
+    restoreService: (id: string) => request<{ service: Service }>(`/welcome/services/${id}/restore`, { method: "POST" }),
+    deleteService: (id: string) => request<{ deleted: true }>(`/welcome/services/${id}`, { method: "DELETE" }),
+    reorderServices: (ids: string[]) => request<ServicesResponse>("/welcome/services/order", { method: "PUT", body: { ids } }),
+  },
+  /** QR codes (PRD 5.8), docs/API.md §9. */
+  qr: {
+    list: (signal?: AbortSignal) => request<QrListResponse>("/welcome/qr-codes", { signal }),
+    get: (id: string, signal?: AbortSignal) => request<QrDetail>(`/welcome/qr-codes/${id}`, { signal }),
+    create: (body: QrInput) => request<{ code: QrCode }>("/welcome/qr-codes", { body }),
+    update: (id: string, body: QrInput & { rowVer: number }) => request<{ code: QrCode }>(`/welcome/qr-codes/${id}`, { method: "PUT", body }),
+    setDates: (id: string, body: QrDatesInput) => request<{ code: QrCode }>(`/welcome/qr-codes/${id}/dates`, { method: "PUT", body }),
+    setState: (id: string, verb: "publish" | "pause" | "resume", rowVer: number) =>
+      request<{ code: QrCode }>(`/welcome/qr-codes/${id}/${verb}`, { method: "POST", body: { rowVer } }),
+    remove: (id: string) => request<{ deleted: true }>(`/welcome/qr-codes/${id}`, { method: "DELETE" }),
+    check: (body: Partial<QrInput> & { id?: string }, signal?: AbortSignal) =>
+      request<{ warnings: QrWarning[] }>("/welcome/qr-codes/check", { body, signal }),
+    logPrint: (ids: string[], layout: PrintLayout, copies: number) => request<{ logged: true }>("/welcome/qr-codes/print", { body: { ids, layout, copies } }),
+    /** Mock mode only: what the short address would do now. */
+    resolve: (slug: string) => request<QrResolve>(`/public/qr/${slug}`),
   },
   connect: {
     queue: (q: { team?: Team; date?: string }, signal?: AbortSignal) =>

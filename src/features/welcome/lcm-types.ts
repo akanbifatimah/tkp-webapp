@@ -63,6 +63,37 @@ export type LcmRating = {
 /** Map 2: where the month's visitors live, by city. lat/lon are null without a US ZIP. */
 export type VisitorCity = { city: string; state: string | null; country: string; guests: number; lat: number | null; lon: number | null; zips: string[] };
 
+/** One follow-up or growth measure (the former "Suggested metrics"). `value` is count / of × 100, null when `of` = 0. */
+export type LcmRate = { count: number; of: number; value: number | null };
+export type LcmOutcomeKey =
+  | "contact48h"
+  | "return30"
+  | "return90"
+  | "conversion"
+  | "cellPlacement"
+  | "undecided"
+  | "per100"
+  | "completeness"
+  | "lowRatings";
+export type LcmOutcome = {
+  key: LcmOutcomeKey;
+  label: string;
+  /** What it counts, in plain words. */
+  measures: string;
+  source: string;
+  /** "%" or "per 100" (attendees). */
+  unit: "%" | "per 100";
+  /** Up is good for every measure except low ratings. */
+  higherIsBetter: boolean;
+  /** The month whose first-time guests are measured ("YYYY-MM"). Earlier than the report month when the window needs time to close. */
+  cohort: string;
+  current: LcmRate;
+  prior: LcmRate & { cohort: string };
+  /** Guests in the cohort whose window has not closed yet, so the number can still rise. */
+  open: number;
+  breakdown?: { label: string; count: number; of: number; note?: string }[];
+};
+
 export type LcmResponse = {
   meta: { month: string; priorMonth: string; year: number; asOf: string; inProgress: boolean; serviceType: string | null };
   periods: LcmPeriod[];
@@ -78,6 +109,8 @@ export type LcmResponse = {
   serviceByDate: { date: string; type: string; guests: number }[];
   otherAnswers: { text: string; guests: number }[];
   visitorCities: VisitorCity[];
+  /** Follow-up and growth measures, in a fixed order. */
+  outcomes: LcmOutcome[];
 };
 
 /** Public outline data for Map 1 (served as /geo/houston-zips.json by the front end's own host). */

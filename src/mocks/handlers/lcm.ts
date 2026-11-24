@@ -1,7 +1,7 @@
 import { HttpResponse, http } from "msw";
 import type { ZipFeature } from "@/features/welcome/lcm-types";
 import { can } from "@/lib/permissions";
-import { audit } from "../db";
+import { audit, db } from "../db";
 import { authenticate, fail, latency, path } from "../http";
 import { getLcm, type ZipPoint } from "../lcm-api";
 import { send } from "./connect";
@@ -20,7 +20,7 @@ const loadOutlines = () =>
 /** Cell ZIPs without a usable outline are still Greater Houston (listed, not drawn). */
 const NO_OUTLINE: Record<string, ZipPoint> = { "77410": { lat: 29.963, lon: -95.697, county: "Harris", city: "Cypress", hasOutline: false } };
 
-async function zipPoints() {
+export async function zipPoints() {
   const m = new Map<string, ZipPoint>(Object.entries(NO_OUTLINE));
   for (const f of await loadOutlines()) {
     m.set(f.properties.zip, { lat: f.properties.lat, lon: f.properties.lon, county: f.properties.county, city: f.properties.city, hasOutline: true });
@@ -55,7 +55,8 @@ export const lcmHandlers = [
       zip: f.properties.zip,
       state: "TX",
       county: f.properties.county,
-      cellGroup: f.properties.cellGroup,
+      // The live cell map (Admin › Cells and ZIPs), not the outline file's copy.
+      cellGroup: db.cellMap.zips[f.properties.zip] ?? null,
       lat: f.properties.lat,
       lon: f.properties.lon,
       geometry: f.geometry,
