@@ -15,6 +15,7 @@ import type {
 } from "@/features/connect/types";
 import type { FeatureCollection, Geometry } from "geojson";
 import type { CellMapResponse, CellName, Service, ServiceInput, ServicesResponse, SetZipResponse } from "@/features/admin/config-types";
+import type { DuplicatesResponse, MergeInput, MergeResult } from "@/features/welcome/duplicate-types";
 import type { LcmResponse } from "@/features/welcome/lcm-types";
 import type { PrintLayout, QrCode, QrDatesInput, QrDetail, QrInput, QrListResponse, QrResolve, QrWarning } from "@/features/welcome/qr-types";
 import type { GuestRecord, GuestSearch, GuestSearchResponse, OverviewResponse, Scope } from "@/features/welcome/types";
@@ -224,6 +225,12 @@ export const api = {
     logPrint: (ids: string[], layout: PrintLayout, copies: number) => request<{ logged: true }>("/welcome/qr-codes/print", { body: { ids, layout, copies } }),
     /** Mock mode only: what the short address would do now. */
     resolve: (slug: string) => request<QrResolve>(`/public/qr/${slug}`),
+  },
+  duplicates: {
+    list: (signal?: AbortSignal) => request<DuplicatesResponse>("/welcome/duplicates", { signal }),
+    merge: (body: MergeInput) => request<MergeResult>("/welcome/duplicates/merge", { body }),
+    dismiss: (ids: number[], note: string | null) => request<{ dismissed: string[] }>("/welcome/duplicates/dismiss", { body: { ids, note } }),
+    restore: (key: string) => request<{ restored: true }>(`/welcome/duplicates/dismissed/${key}`, { method: "DELETE" }),
   },
   connect: {
     queue: (q: { team?: Team; date?: string }, signal?: AbortSignal) =>

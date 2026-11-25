@@ -65,6 +65,8 @@ export const NAV: NavGroup[] = [
       { label: "LCM Metrics", to: "/welcome/lcm", permission: "welcome.lcm.view" },
       // PRD 5.8: QR codes sit under Welcome (the welcome team prints them).
       { label: "QR codes", to: "/welcome/qr", permission: "qr.view" },
+      // PRD W-14 / WT-7: duplicate review and merge.
+      { label: "Duplicates", to: "/welcome/duplicates", permission: "welcome.duplicates.view" },
     ],
   },
   {

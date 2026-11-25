@@ -1,6 +1,7 @@
 import type { LogRow } from "@/features/connect/types";
 import { seedAttendance, type AttendanceRow } from "./seed/attendance";
 import { seedAudit } from "./seed/audit";
+import { addDuplicates } from "./seed/duplicates";
 import type { CellName } from "@/features/admin/config-types";
 import { CELL_ZIPS, seedConnect, type ConnectRecord, type WelcomeEntry } from "./seed/guests";
 import { seedQr, type QrRecord, type QrScanRow } from "./seed/qr";
@@ -34,7 +35,8 @@ export type SettingsRecord = {
   updatedById: string | null;
 };
 
-const seeded = seedConnect();
+// The five fictional duplicate cases go in before anything reads the guests.
+const seeded = addDuplicates(seedConnect());
 const qr = seedQr();
 const staff = STAFF.map((s) => ({ ...s, roles: [...s.roles] })) as StaffRecord[];
 
@@ -78,6 +80,10 @@ export const db = {
   qrScans: qr.scans as QrScanRow[],
   /** Service headcounts (LCM guests per 100 attendees). A new table: TKP does not collect these yet. */
   attendance: seedAttendance() as AttendanceRow[],
+  /** Records merged into another (W-14): kept for the audit trail, out of every list. */
+  mergedRecords: [] as (ConnectRecord & { mergedInto: number; mergedAt: string; mergedById: string })[],
+  /** Pairs staff marked "not the same person": never suggested again. Key = the two connectIds, sorted, "a-b". */
+  duplicateDismissals: [] as { key: string; ids: [number, number]; byId: string; at: string; note: string | null }[],
 };
 
 /** Every sign-in, search, guest view, assignment, save and admin change is audited (FI-09, PRD F-5). */

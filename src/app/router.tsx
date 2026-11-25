@@ -21,6 +21,7 @@ const OverviewPage = lazy(() => import("@/features/welcome/OverviewPage").then((
 const LookupPage = lazy(() => import("@/features/welcome/LookupPage").then((m) => ({ default: m.LookupPage })));
 const LcmPage = lazy(() => import("@/features/welcome/LcmPage").then((m) => ({ default: m.LcmPage })));
 const QrCodesPage = lazy(() => import("@/features/welcome/QrCodesPage").then((m) => ({ default: m.QrCodesPage })));
+const DuplicatesPage = lazy(() => import("@/features/welcome/DuplicatesPage").then((m) => ({ default: m.DuplicatesPage })));
 const QrPrintPage = lazy(() => import("@/features/welcome/QrPrintPage").then((m) => ({ default: m.QrPrintPage })));
 const QueuePage = lazy(() => import("@/features/connect/QueuePage").then((m) => ({ default: m.QueuePage })));
 const LogPage = lazy(() => import("@/features/connect/LogPage").then((m) => ({ default: m.LogPage })));
@@ -115,6 +116,7 @@ export const router = createBrowserRouter([
           { path: "lcm", element: page("welcome.lcm.view", <LcmPage />) },
           { path: "qr", element: page("qr.view", <QrCodesPage />) },
           { path: "qr/print", element: page("qr.print", <QrPrintPage />) },
+          { path: "duplicates", element: page("welcome.duplicates.view", <DuplicatesPage />) },
         ],
       },
       {

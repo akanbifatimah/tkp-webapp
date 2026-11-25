@@ -104,6 +104,15 @@ describe("landing and navigation", () => {
     for (const r of ["church_office_admin", "church_office", "integration_team", "tkp_member"] as Role[]) expect(can(r, "qr.view")).toBe(false);
   });
 
+  it("M7 duplicates (PRD W-14): the admins merge; the welcome lead and Tech Team only see the list", () => {
+    for (const r of ["tech_admin", "church_admin", "integration_admin"] as Role[]) expect(can(r, "welcome.duplicates.merge")).toBe(true);
+    for (const r of ["welcome_lead", "tech_team"] as Role[]) {
+      expect(can(r, "welcome.duplicates.view")).toBe(true);
+      expect(can(r, "welcome.duplicates.merge")).toBe(false);
+    }
+    for (const r of ["lead_pastor", "welcome_team", "church_office_admin", "integration_team", "tkp_member"] as Role[]) expect(can(r, "welcome.duplicates.view")).toBe(false);
+  });
+
   it("M6: Tech Admin and Church Admin land on the dashboard", () => {
     expect(landingPath("tech_admin")).toBe("/dashboard");
     expect(landingPath("church_admin")).toBe("/dashboard");

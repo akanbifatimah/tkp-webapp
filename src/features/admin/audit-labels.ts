@@ -32,6 +32,10 @@ export const ACTION_LABEL: Record<string, string> = {
   "welcome.qr.resume": "Resumed a QR code",
   "welcome.qr.delete": "Deleted a QR code",
   "welcome.qr.print": "Printed QR codes",
+  "welcome.duplicates.view": "Opened duplicate guests",
+  "welcome.duplicates.merge": "Merged duplicate guests",
+  "welcome.duplicates.dismiss": "Marked guests as not the same person",
+  "welcome.duplicates.restore": "Put a pair back for review",
   "connect.assign": "Assigned a guest",
   "connect.guest.view": "Opened a guest in Connect",
   "connect.log.save": "Saved a follow-up log",
@@ -50,8 +54,8 @@ export const actionLabel = (a: string) => ACTION_LABEL[a] ?? a;
 
 /** Tone for the action chip: red for failures and removals, gold for exports and admin changes. */
 export function actionTone(a: string): "crit" | "gold" | "maroon" | "neutral" {
-  if (["sign_in_failed", "mfa.failed", "user.deactivate", "user.sessions.revoke", "welcome.cellmap.remove", "welcome.service.delete", "welcome.service.retire", "welcome.qr.delete", "welcome.qr.pause"].includes(a)) return "crit";
-  if (a.endsWith(".export") || a.startsWith("user.") || a.startsWith("settings.") || a.startsWith("welcome.cellmap.") || a.startsWith("welcome.service.") || a.startsWith("welcome.qr.")) return "gold";
+  if (["sign_in_failed", "mfa.failed", "user.deactivate", "user.sessions.revoke", "welcome.cellmap.remove", "welcome.service.delete", "welcome.service.retire", "welcome.qr.delete", "welcome.qr.pause", "welcome.duplicates.merge"].includes(a)) return "crit";
+  if (a.endsWith(".export") || a.startsWith("user.") || a.startsWith("settings.") || a.startsWith("welcome.cellmap.") || a.startsWith("welcome.service.") || a.startsWith("welcome.qr.") || a.startsWith("welcome.duplicates.")) return "gold";
   if (a.startsWith("sign_") || a.startsWith("mfa.") || a.startsWith("password.")) return "neutral";
   return "maroon";
 }
@@ -102,4 +106,14 @@ export const FIELD_LABEL: Record<string, string> = {
   codes: "Codes",
   layout: "Layout",
   copies: "Copies",
+  records: "Records",
+  kept: "Record kept",
+  merged: "Merged into it",
+  journeyFrom: "Journey kept from",
+  firstName: "First name",
+  lastName: "Last name",
+  address: "Address",
+  city: "City",
+  zip: "ZIP",
+  visits: "Visits",
 };

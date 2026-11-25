@@ -187,7 +187,9 @@ function show(key: string, v: unknown): string {
   if (typeof v === "boolean") return v ? "Yes" : "No";
   // QR dates are UTC instants: show them in church time (PRD 8.3).
   if ((key === "activeFrom" || key === "expiresAt") && typeof v === "string") return formatWhen(v);
-  if (Array.isArray(v)) return v.join(", ");
+  // Duplicate merges list the records involved: "Marcus Adeleke (#612)".
+  if (Array.isArray(v)) return v.map((x) => (x && typeof x === "object" ? `${(x as { name?: string }).name ?? "?"} (#${(x as { connectId?: number }).connectId ?? "?"})` : key === "merged" || key === "records" ? `#${x}` : String(x))).join(", ");
+  if (key === "kept" || key === "journeyFrom") return `#${v}`;
   return String(v);
 }
 

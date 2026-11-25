@@ -973,3 +973,110 @@ The screen warns when one square of a code would print smaller than 0.75 mm, and
 - The address on today's printed code (seeded as a placeholder).
 - Whether Tech Team should see QR codes.
 - The course list, which comes with Grow (M8).
+
+---
+
+## 10. Duplicate guests (M7)
+
+PRD W-14 (duplicate detection by verified phone or email, never the name alone, with a review and merge screen), A-1 (one Person ID per person), WT-4 and WT-7, and 8.1 ("same phone or email submitted twice: link as a duplicate candidate; never auto-merge on name alone"). Screen: Welcome › Duplicates (`/welcome/duplicates`). The mock is `src/mocks/duplicates-api.ts`, with its tests in `src/mocks/duplicates-api.test.ts`.
+
+| Key | Who | Opens |
+|---|---|---|
+| `welcome.duplicates.view` | Tech Admin, Church Admin, Integration Admin, Welcome Lead, Tech Team | The list |
+| `welcome.duplicates.merge` | Tech Admin, Church Admin, Integration Admin | Merge, "not the same person", put back |
+
+Anyone else gets `403 FORBIDDEN`.
+
+**A record** is one person's Connect journey (`connectId`, TKP Connect `itg.Connect`), with all their form entries (`vw_WelcomeGuest`) and follow-up logs (`itg.ConnectLog`).
+
+### How records are matched (A-1)
+
+Two records are a **candidate pair** when any phone or email on any of their form entries is the same once normalised:
+- **Phone:** digits only. 10 digits becomes `+1` and the digits; 11 digits starting with 1 becomes `+` and the digits; anything else with 8 or more digits becomes `+` and the digits. Fewer than 8 digits is ignored. So `(832) 555-0167`, `+1 832-555-0167` and `832.555.0167` match.
+- **Email:** trimmed and lower-cased.
+- **Names never link records,** alone or together with anything else. A differing name sets `namesDiffer` so the screen can warn.
+
+Groups are the connected sets of candidate pairs (three records can be one group), leaving out pairs marked "not the same person". The real backend should check new form entries against this as they arrive and **never merge on its own** (PRD 8.1).
+
+### `GET /welcome/duplicates`
+
+```json
+{
+  "groups": [{
+    "id": "135-588",
+    "reasons": [{ "kind": "phone", "value": "(832) 555-0167" }, { "kind": "email", "value": "funmi.okoro@example.com" }],
+    "namesDiffer": true,
+    "people": [{
+      "connectId": 135, "name": "Funmilayo Okoro",
+      "fields": { "firstName": "Funmilayo", "lastName": "Okoro", "phone": "(832) 555-0167", "email": "funmi.okoro@example.com", "address": "…", "city": "Katy", "zip": "77494" },
+      "firstVisit": "2026-10-25", "lastVisit": "2026-10-25", "visits": 1, "serviceTypes": ["Sunday 1st Service"],
+      "journey": { "status": "Active", "closedReason": null, "phase": 3, "churchOffice": "Lydia Fashola", "integration": "Tobi Martins", "steps": 12 },
+      "logs": 3, "rowVer": 1
+    }],
+    "suggestedJourney": 135,
+    "newest": "2026-11-08"
+  }],
+  "dismissed": [{ "key": "146-589", "ids": [146, 589], "names": ["Kunle Durojaiye", "Bisi Durojaiye"], "reasons": [], "by": "Esther Coleman", "at": "…", "note": "Husband and wife share the home phone." }],
+  "can": { "merge": true }
+}
+```
+
+- `people` are sorted by first visit, oldest first.
+- `visits` counts different service dates.
+- `steps` counts the ticked checklist items.
+- `logs` counts follow-up notes.
+- `suggestedJourney` is the journey furthest along: Completed, then Active, then Closed; then by phase, steps and notes.
+- Groups are sorted with the newest first visit first.
+- Audited as `welcome.duplicates.view`.
+
+### `POST /welcome/duplicates/merge`
+
+```json
+{ "keepId": 135, "mergeIds": [588], "journeyFrom": 588,
+  "fields": { "firstName": 135, "phone": 588 },
+  "rowVers": { "135": 1, "588": 1 } }
+```
+
+| Field | Meaning |
+|---|---|
+| `keepId` | The record that stays. Its `connectId` survives |
+| `mergeIds` | The records merged into it |
+| `journeyFrom` | Whose follow-up journey carries on |
+| `fields` | For each of `firstName`, `lastName`, `phone`, `email`, `address`, `city` and `zip`, the record whose value to keep. Address brings its apartment; city brings its state. A field left out keeps the kept record's value |
+
+Effect, in one transaction:
+1. The chosen journey (status, phase, assignees, attempts, checklist, outcomes) is copied onto the kept record.
+2. Every form entry and every follow-up log of the merged records moves to the kept record. The logs show the kept name.
+3. Visit numbers are recounted by service date. The first visit becomes the earliest one. If there is more than one date, the person is marked as returned, with the second date as `returnVisitDate`. That feeds LCM "Came back within 30 / 90 days".
+4. The merged records leave every list and count: Connect queues, metrics, Welcome and LCM. They are kept as `status = Closed`, `closedReason = "Merged"`, with `mergedInto`, `mergedAt` and `mergedById`, for the audit trail.
+5. `rowVer` of the kept record goes up by 1.
+
+Returns 200 `{ "kept": { …person }, "merged": [588] }`. Audited as `welcome.duplicates.merge`:
+- `before.records` lists every record (name, contact fields, visits, journey status and phase);
+- `after` holds the kept id, merged ids, `journeyFrom`, the chosen values and the visit count.
+
+| Status | `code` | When |
+|---|---|---|
+| 404 | `NOT_FOUND` | A record no longer exists (merged already) |
+| 409 | `CONFLICT` | A `rowVers` entry is stale |
+| 409 | `NOT_DUPLICATE` | The records no longer share a phone or email (someone edited them, or marked the pair). Merging is only allowed inside one current group |
+| 422 | `VALIDATION_FAILED` | No `mergeIds`; `journeyFrom` or a `fields` value is not one of these records |
+
+The screen asks for confirmation first, naming every record and the consequence. The real backend may add an **unmerge** later; nothing in the PRD asks for it, and the audit row holds what it would need.
+
+### `POST /welcome/duplicates/dismiss`
+
+"Not the same person", for example a couple sharing the home phone. Body: `{ "ids": [146, 589], "note": "Husband and wife share the home phone." }`, where `note` is optional (up to 300 characters).
+- Every pair in `ids` is remembered and never suggested again.
+- Returns 200 `{ "dismissed": ["146-589"] }`.
+- Audited as `welcome.duplicates.dismiss`.
+- Errors: 422 `VALIDATION_FAILED` for fewer than 2 records, or records that don't exist.
+
+### `DELETE /welcome/duplicates/dismissed/{key}`
+
+Puts a pair back in the review list (the screen's "Put back for review" and the toast's Undo). `key` is the two `connectId`s, sorted, joined with `-`. Returns 200 `{ "restored": true }`, audited as `welcome.duplicates.restore`. Errors: 404 `NOT_FOUND`.
+
+**Open questions:**
+- **"Verified" contact.** The PRD says "verified phone or email". The welcome form doesn't verify either today, so matching uses the normalised values as given. Once guests confirm a code (portal sign-in), only verified values should match.
+- **Who decides.** Should the Welcome Lead be able to merge, or only see the list (the current setting)?
+- **Unmerge.** Is undoing a merge needed?

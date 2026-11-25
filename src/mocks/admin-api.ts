@@ -266,6 +266,7 @@ function targetLabel(r: AuditRow): string | null {
     const name = db.qrCodes.find((c) => c.id === r.target)?.name ?? (r.meta?.before?.name as string | undefined) ?? (r.meta?.after?.name as string | undefined);
     return name ?? r.target;
   }
+  if (r.action.startsWith("welcome.duplicates.")) return (r.meta?.after?.name as string | undefined) ?? (r.meta?.before?.name as string | undefined) ?? r.target;
   if (r.action.startsWith("connect.") && /^\d+$/.test(r.target)) return `Connect #${r.target}`;
   return r.target;
 }

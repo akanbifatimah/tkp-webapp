@@ -167,6 +167,13 @@ const LATEST_IT: (string | null)[] = ["u09", "u10", "u09", "u01", null, "u09", "
 const emptyChecklist = () => Object.fromEntries(STEP_KEYS.map((k) => [k, null])) as Record<StepKey, ChecklistEntry>;
 const emptyMulti = () => Object.fromEntries(MULTI_KEYS.map((k) => [k, false])) as Record<MultiKey, boolean>;
 
+/**
+ * One number per guest, so the only shared phones are the deliberate duplicate
+ * cases (seed/duplicates.ts). The third argument is the random draw the old
+ * line number used: still taken, so every later random value stays the same.
+ */
+const uniquePhone = (area: string, guestId: number, _draw: number) => `(${area}) 555-${String(guestId % 10000).padStart(4, "0")}`;
+
 export function seedConnect() {
   const records: ConnectRecord[] = [];
   const logs: LogRow[] = [];
@@ -202,7 +209,7 @@ export function seedConnect() {
       usedNames.add(`${first} ${last}`);
       const away = chance(0.06) ? pick(OUT_OF_AREA) : null;
       const zip: string | null = away ? away.zip : chance(0.75) ? pick(Object.keys(CELL_ZIPS)) : pick(OTHER_ZIPS);
-      const phone = chance(0.95) ? `(${pick(["281", "832", "713"])}) 555-0${100 + Math.floor(rnd() * 99)}` : null;
+      const phone = chance(0.95) ? uniquePhone(pick(["281", "832", "713"]), guestId + 1, rnd()) : null;
       const submitted = new Date(new Date(svc.startUtc).getTime() + (60 + rnd() * 90) * 60_000);
       const id = ++guestId;
       const entry: GuestEntry = {
