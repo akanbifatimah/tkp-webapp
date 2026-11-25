@@ -845,9 +845,7 @@ Legacy codes (QR-7) have no slug. Their printed address is today the church webs
     "state": "live", "status": "active",
     "note": "Two cards on each welcome desk.", "caption": "New here? Scan to say hello",
     "createdAt": "…", "createdBy": "Esther Coleman", "updatedAt": "…", "updatedBy": null, "rowVer": 1,
-    "scans": { "total": 412, "last30": 35, "lastAt": "2026-11-22" },
-    "warnings": [{ "kind": "overlap", "otherId": "qr-1", "otherName": "Printed welcome code (church website)",
-                   "message": "“Printed welcome code (church website)” also opens Guest form at the same time." }]
+    "scans": { "total": 412, "last30": 35, "lastAt": "2026-11-22" }
   }],
   "counts": { "active": 2, "scheduled": 2, "paused": 1, "draft": 1, "expired": 1 },
   "targets": { "event": [{ "id": "svc-5", "name": "168 Hours of Praise", "hint": "2027-01-03 to 2027-01-09" }],
@@ -862,11 +860,13 @@ Legacy codes (QR-7) have no slug. Their printed address is today the church webs
 - `can` tells the screen which buttons to show.
 - The front end refetches every minute, so a status change shows on screen.
 
-**Warnings (QR-8): warn, never block.** Warnings appear only on `active` and `scheduled` codes, and in the result of `check`:
-- **`overlap`:** another active or scheduled code has the same `destination` and `targetId`, and its time window overlaps. A window runs from `activeFrom` to `expiresAt`, open-ended when that is null.
-- **`expires_before_service`:** the linked service is still to come and the code expires first. For an `event` code, the event counts as the linked service.
-  - Weekly service: the code expires before the end of the next occurrence after max(now, `activeFrom`). A service counts as 2 hours long. The message reads "Stops working before the next …" or "Stops working during …".
+**QR-8: errors, not warnings (TKP, 2026-11-25).** TKP asked for no warning labels: a problem either blocks saving until it is fixed, or isn't flagged at all. This changes PRD QR-8 and 8.3 ("warn, do not block"):
+- **The code stops before its service** blocks saving, as `422 VALIDATION_FAILED` with `fields.expiresAt`. It is checked on create, full edit and the quick date edit (`PUT …/dates`). The service is the linked one; for an `event` code, the event counts as the service.
+  - Weekly service: the code expires before the end of the next occurrence after max(now, `activeFrom`). A service counts as 2 hours long. The message reads "It would stop before the next … (date). Move the expiry after that service, or choose no particular service." or "It would stop during …".
   - Special event with dates: the code expires before 23:59 church time on the event's last day.
+  - No expiry, or an expiry already in the past (an expired code), is never a problem.
+- **Two codes for the same place** (the old `overlap` warning) is no longer flagged. Several printed codes opening the guest form (table cards, posters, the printed code) is normal.
+- Codes no longer carry a `warnings` field.
 
 ### `GET /welcome/qr-codes/{id}`
 
@@ -891,7 +891,9 @@ Feeds the detail screen (QR-6):
 
 ### `POST /welcome/qr-codes` · `PUT /welcome/qr-codes/{id}`
 
-Body: `{ name, destination, targetId, serviceId, activeFrom, expiresAt, caption, note }`. `POST` also takes `draft` (true saves without turning the code on) and `legacyUrl` (registers a code that is already printed, QR-7). A legacy code is never a draft. `PUT` adds `rowVer`.
+Body: `{ name, destination, targetId, serviceId, activeFrom, expiresAt, caption, note }`. `PUT` adds `rowVer`. `POST` also takes:
+- `draft`: true saves without turning the code on.
+- `legacyUrl`: the link a code that is **already printed** opens (QR-7). The screen has one "Add a QR code" form that asks "Is this code already printed?" (TKP, 2026-11-25). "Yes" shows this field and requires it; "No" leaves it out, and the code gets a new short link. A legacy code is never a draft, and its link can't be changed later.
 
 - `POST` returns 201 `{ "code" }` with a new slug (legacy codes get none). A live code with no `activeFrom` starts now; a draft keeps it null.
 - `PUT` returns 200 `{ "code" }`. The slug never changes, so printed copies keep working (PRD 8.3). If nothing changed, nothing is audited.
@@ -914,13 +916,14 @@ Field rules behind `VALIDATION_FAILED`:
 - `fields.targetId`: an active special event, or a course.
 - `fields.serviceId`: a service that exists.
 - `fields.activeFrom`, `fields.expiresAt`: ISO instants, and **the expiry must come after the start**.
+- `fields.expiresAt`: the code must keep working until its service or event is over (QR-8, above).
 - `fields.caption`: up to 60 characters.
 - `fields.note`: up to 500 characters.
 - `fields.legacyUrl`: an http or https URL that is not already registered.
 
 ### `POST /welcome/qr-codes/check`
 
-Needs `qr.manage`. The body is the form so far, plus `id` when editing. Returns 200 `{ "warnings": [...] }`, computed as if the code were on. The form calls it 400 ms after people stop typing, so warnings show before they save.
+Needs `qr.manage`. The body is the form so far, plus `id` when editing. Returns 200 `{ "fields": { "expiresAt": "It would stop before the next Sunday 1st Service (…)" } }`, or `{ "fields": {} }` when all is well. The form calls it 400 ms after people stop typing, shows the message under Expires, and keeps Save off until it is fixed. The save checks again on the server.
 
 ### `PUT /welcome/qr-codes/{id}/dates`
 
@@ -982,14 +985,16 @@ PRD W-14 (duplicate detection by verified phone or email, never the name alone, 
 
 | Key | Who | Opens |
 |---|---|---|
-| `welcome.duplicates.view` | Tech Admin, Church Admin, Integration Admin, Welcome Lead, Tech Team | The list |
-| `welcome.duplicates.merge` | Tech Admin, Church Admin, Integration Admin | Merge, "not the same person", put back |
+| `welcome.duplicates.view` | Tech Admin, Church Admin, Integration Admin, Welcome Lead, Tech Team | The list and the merge history |
+| `welcome.duplicates.merge` | Tech Admin, Church Admin, Integration Admin, Welcome Lead (TKP, 2026-11-25) | Merge, undo a merge, "not the same person", put back |
 
 Anyone else gets `403 FORBIDDEN`.
 
 **A record** is one person's Connect journey (`connectId`, TKP Connect `itg.Connect`), with all their form entries (`vw_WelcomeGuest`) and follow-up logs (`itg.ConnectLog`).
 
 ### How records are matched (A-1)
+
+**Decided by TKP (2026-11-25):** match on the phone and email as typed, once normalised; the welcome form does not verify them. When guests verify a phone or email (portal sign-in), prefer the verified value.
 
 Two records are a **candidate pair** when any phone or email on any of their form entries is the same once normalised:
 - **Phone:** digits only. 10 digits becomes `+1` and the digits; 11 digits starting with 1 becomes `+` and the digits; anything else with 8 or more digits becomes `+` and the digits. Fewer than 8 digits is ignored. So `(832) 555-0167`, `+1 832-555-0167` and `832.555.0167` match.
@@ -1017,6 +1022,8 @@ Groups are the connected sets of candidate pairs (three records can be one group
     "newest": "2026-11-08"
   }],
   "dismissed": [{ "key": "146-589", "ids": [146, 589], "names": ["Kunle Durojaiye", "Bisi Durojaiye"], "reasons": [], "by": "Esther Coleman", "at": "…", "note": "Husband and wife share the home phone." }],
+  "merges": [{ "id": "…", "at": "…", "by": "Esther Coleman", "keptId": 124, "keptName": "Marcus Adeleke",
+               "merged": [{ "connectId": 587, "name": "Marcus Adeleke" }], "undoneAt": null, "undoneBy": null, "blocked": null }],
   "can": { "merge": true }
 }
 ```
@@ -1027,6 +1034,7 @@ Groups are the connected sets of candidate pairs (three records can be one group
 - `logs` counts follow-up notes.
 - `suggestedJourney` is the journey furthest along: Completed, then Active, then Closed; then by phase, steps and notes.
 - Groups are sorted with the newest first visit first.
+- `merges` is every merge, newest first. `blocked` says why one cannot be undone now (see undo below).
 - Audited as `welcome.duplicates.view`.
 
 ### `POST /welcome/duplicates/merge`
@@ -1051,7 +1059,7 @@ Effect, in one transaction:
 4. The merged records leave every list and count: Connect queues, metrics, Welcome and LCM. They are kept as `status = Closed`, `closedReason = "Merged"`, with `mergedInto`, `mergedAt` and `mergedById`, for the audit trail.
 5. `rowVer` of the kept record goes up by 1.
 
-Returns 200 `{ "kept": { …person }, "merged": [588] }`. Audited as `welcome.duplicates.merge`:
+Returns 200 `{ "mergeId": "…", "kept": { …person }, "merged": [588] }`. The backend stores, with the merge, what undo needs: every record as it was, the owner and visit number of each form entry, the owner and guest name of each log, and the kept record's `rowVer` right after the merge. Audited as `welcome.duplicates.merge`:
 - `before.records` lists every record (name, contact fields, visits, journey status and phase);
 - `after` holds the kept id, merged ids, `journeyFrom`, the chosen values and the visit count.
 
@@ -1062,7 +1070,25 @@ Returns 200 `{ "kept": { …person }, "merged": [588] }`. Audited as `welcome.du
 | 409 | `NOT_DUPLICATE` | The records no longer share a phone or email (someone edited them, or marked the pair). Merging is only allowed inside one current group |
 | 422 | `VALIDATION_FAILED` | No `mergeIds`; `journeyFrom` or a `fields` value is not one of these records |
 
-The screen asks for confirmation first, naming every record and the consequence. The real backend may add an **unmerge** later; nothing in the PRD asks for it, and the audit row holds what it would need.
+The screen asks for confirmation first, naming every record and the consequence. The success toast offers Undo.
+
+### `POST /welcome/duplicates/merges/{mergeId}/undo`
+
+Undo a merge (TKP asked for it, 2026-11-25). No body. Effect:
+1. The merged records come back to every list, as they were, with `rowVer` + 1.
+2. Every form entry and log that existed at the merge goes back to its owner, with its visit number and guest name.
+3. Logs and entries added to the kept record **after** the merge stay with the kept record.
+4. The kept record gets back its own details and journey, **unless follow-up was saved on it since** (its `rowVer` moved on from the merge). Then it keeps its current journey, gets back its details only, and the response says `journeyKept: true`.
+
+Returns 200 `{ "restored": [588], "journeyKept": false }`. Audited as `welcome.duplicates.unmerge`.
+
+| Status | `code` | When |
+|---|---|---|
+| 404 | `NOT_FOUND` | No such merge |
+| 409 | `ALREADY_UNDONE` | Undone already |
+| 409 | `MERGED_AGAIN` | The kept record was merged into another one since (undo that one first), or a merged record is back already |
+
+The screen asks first (not red: nothing is lost) and lists merges under **Merged**.
 
 ### `POST /welcome/duplicates/dismiss`
 
@@ -1076,7 +1102,278 @@ The screen asks for confirmation first, naming every record and the consequence.
 
 Puts a pair back in the review list (the screen's "Put back for review" and the toast's Undo). `key` is the two `connectId`s, sorted, joined with `-`. Returns 200 `{ "restored": true }`, audited as `welcome.duplicates.restore`. Errors: 404 `NOT_FOUND`.
 
+**Decided (TKP, 2026-11-25):** match on typed values until guests verify them; the Welcome Lead merges too; merges can be undone.
+
+---
+
+## 11. Import (M7)
+
+PRD W-16 ("import wizard for past guest entries and follow-up tracker records with column matching, preview and error report"), WT-5, WT-7, 4.4 "Spreadsheet parsing". It is built as the **shared import engine** that the programme import (EV-23 to EV-29) and positions upload (P-4) reuse, so it follows their rules:
+- the steps: start, columns and settings, preview and fix, confirm;
+- file safety;
+- partial import;
+- undo;
+- "importing the same file again creates no duplicates".
+
+Screens: Welcome › Import (`/welcome/import`) and the wizard (`/welcome/import/{id}`). The mock is `src/mocks/import-api.ts` (rules) and `src/mocks/import-parse.ts` (reading files), with tests in `src/mocks/import-api.test.ts`.
+
+| Key | Who |
+|---|---|
+| `welcome.import` | Tech Admin, Church Admin, Integration Admin, Welcome Lead (TKP, 2026-11-25): past guest entries |
+| `welcome.import.followups` | Tech Admin, Church Admin, Integration Admin: follow-up tracker records (Connect notes) too |
+
+Everyone else gets `403 FORBIDDEN`. Someone without `welcome.import.followups` gets 403 when uploading follow-up records, never sees those imports in the list, and can't open or undo them. `can.followups` in the list tells the screen whether to offer them. **Imports never send anything** to guests or staff, and never publish anything.
+
+### Files (PRD EV-26, 4.4)
+
+- **Formats:** `.xlsx` and `.csv` only.
+  - `.xlsm`, `.xls` and `.xlsb` are refused with 415 `UNSUPPORTED_FILE`. The message says to save the file as .xlsx.
+- **Limits:** up to 10 MB (413 `FILE_TOO_LARGE`) and 5,000 rows per sheet (422 `TOO_MANY_ROWS`). An empty file is 422 `EMPTY_FILE`; one that can't be read is 422 `UNREADABLE_FILE`.
+- **Parsing.** The backend parses in a sandboxed background job, with memory and time limits.
+  - It reads cached cell values only and **never evaluates a formula**.
+  - It rejects macros, embedded objects and external links, and virus-scans the file.
+  - Excel dates arrive as dates.
+- **CSV:** UTF-8 with or without a byte order mark. The delimiter (`,` `;` or tab) is detected. Quoted cells may contain the delimiter, `""` and line breaks.
+- **Storage.** The uploaded file goes to private storage. It is deleted after the retention period (default 30 days, a Setting).
+- **Drafts.** A staged draft is **private to whoever uploaded it** and expires after 24 hours.
+
+### What a row becomes
+
+**Past guest entries** (`kind: "guests"`). One row is one visit (one welcome-form entry).
+
+| Field | Notes |
+|---|---|
+| `serviceDate` (required) | A date in any common form: `2025-03-02`, `3/2/2025` (the `dateOrder` setting says month or day first), `Mar 2, 2025`, `2 March 2025`, or an Excel serial number such as `45601` (as Excel writes it into CSV). A future date is an error |
+| `serviceType` | Must name a service from §8 (any letter case), else the `defaultService` setting. Otherwise an error that can be fixed in place |
+| `firstName`, `lastName`, `phone`, `email`, `gender`, `maritalStatus`, `ageBracket`, `address`, `city`, `state`, `zip`, `country`, `howHeard`, `whoInvitedYou`, `willComeAgain`, `likeToBecomeMember`, `prayerRequest`, `comments` | Phones are normalised as in §10, then shown as `(832) 555-0901`. Choices take common short forms (`F`, `M`, `Y`, `N`). A value that isn't recognised is left out with a **warning**; it never blocks the row |
+| `rating.Music` … `rating.Traffic` | Whole numbers from 0 to 10; anything else is left out with a warning |
+
+- **Matching (A-1).** A row is matched to an existing guest **by phone or email, never by name**. If the name differs, the row gets a warning.
+  - When the phone or email belongs to two records (a duplicate not merged yet), the row links to the oldest and warns.
+- **One person, several rows.** Rows in the same file with the same phone or email are one new guest ("Same new guest as row 3").
+- **Row key.** A row's key is the person and the service date (BR-02).
+  - The same key twice in one file is an error on the later row.
+  - A key that already exists is `unchanged` when every filled-in value matches, else `update`, with the list of `changes`.
+  - **A blank cell never clears a value.**
+- **Errors:** no service date, an unknown service, or no name, phone or email at all. A row with a name but no phone or email gets a warning: it can't be matched or followed up.
+- **New guests.**
+  - With `followUp: "history"` (the default), a person is created with their journey closed as `Imported history`, so no follow-up clock starts.
+  - With `"start"`, people whose visit was in the last 14 days get an active, unassigned journey; older ones are still history.
+- **Visit numbers** are recounted for every person touched. A second date marks the person as returned, which feeds LCM "Came back within 30 / 90 days".
+
+**Follow-up tracker records** (`kind: "followups"`). One row is one contact: a Connect log (§3).
+
+| Field | Notes |
+|---|---|
+| `date` (required) | A date with an optional time (`6:30 PM`, `18:30`) in church time; no time means noon. Stored as a UTC instant |
+| `phone` / `email` | Finds the guest. **One of them is required**, and the guest must already exist: "Import their guest entry first" |
+| `guestName` | Shown, and compared for a warning; **never used to match** |
+| `team` | `Church office` (also `CO`) or `Integration` (also `IT`), else the `defaultTeam` setting |
+| `caller` | Matched to a TKP Hub user by full name. Otherwise saved **by name only**, with a warning |
+| `method`, `callOutcome`, `wantsMembership`, `lifeGroup`, `note` | `method` defaults to Phone Call |
+
+- **Row key:** guest, the minute of `date`, and team.
+- **What it adds:** logs only (marked "Imported from the follow-up tracker"). The guest's journey, checklist and assignees don't change.
+
+**Columns that match nothing.** They go into `comments` / `note` as `Header: value` (`unmapped: "notes"`, the default), or are left out (`"ignore"`).
+
+### `GET /welcome/imports`
+
+Returns `{ items: ImportSummary[], can: { import } }`, newest first: committed and undone imports, plus **your own** drafts.
+
+```json
+{ "id": "…", "kind": "guests", "fileName": "Welcome cards 2025.xlsx", "fileSize": 3394, "status": "committed",
+  "createdAt": "…", "createdBy": "Esther Coleman", "counts": { "total": 10, "new": 7, "update": 0, "unchanged": 0, "error": 3, "warnings": 2 },
+  "result": { "added": 7, "updated": 0, "unchanged": 0, "failed": 3, "newGuests": 5 },
+  "committedAt": "…", "committedBy": "Esther Coleman", "undoneAt": null, "undoneBy": null, "undoUntil": "…", "expiresAt": "…" }
+```
+
+`status` is `draft`, `committed`, `undone` or `discarded`.
+
+### `POST /welcome/imports` (upload and analyse)
+
+Multipart, with `kind` (`guests` or `followups`) and `file`. Returns 201 with the job (below):
+- the first sheet with rows is chosen;
+- the header row is found (the first of the first 10 rows with two or more text cells);
+- columns are matched;
+- the preview is built.
+
+Audited as `welcome.import.upload`. The real backend may answer 202 and finish the analysis in the background; the screen then polls `GET /welcome/imports/{id}`.
+
+### `GET /welcome/imports/{id}` · `PATCH /welcome/imports/{id}`
+
+The job: the summary above, plus:
+
+| Field | Content |
+|---|---|
+| `sheets[]` | `{ name, rows }`; `sheet` is the chosen one |
+| `columns[]` | `{ index, header, samples (up to 3), field, confidence }`, where `confidence` is 1 for a known header name, 0.6 for a partial match (shown as "Check this"), 0 for none |
+| `fileHeaders[]` | The header cells, kept after commit for the error file |
+| `settings` | `{ headerRow, dateOrder: "MDY" \| "DMY", unmapped: "notes" \| "ignore", mode: "add" \| "update", defaultService, followUp: "history" \| "start", defaultTeam: "church_office" \| "integration" }` |
+| `rows[]` | `{ rowNo (as Excel numbers it), status: new \| update \| unchanged \| error, values, cells (as in the file), errors: [{ field, message }], warnings[], match, changes: [{ field, from, to }], fixed[] }` |
+| `services[]` | Service names, for the settings and fixes |
+| `mine` | Whether you uploaded it |
+
+`PATCH` takes any of the following and returns the new job:
+
+| Key | Effect |
+|---|---|
+| `sheet` | Re-detects the header row and the columns, and clears fixes |
+| `mapping` | `{ "<column index>": "<field>" \| null }`. One column per field: choosing a field takes it off any other column |
+| `settings` | Partial. A new `headerRow` re-matches the columns |
+| `fixes` | `[{ rowNo, field, value }]`: fix in place; the row is checked again |
+
+Errors:
+- 404 `NOT_FOUND` for someone else's draft, or a discarded or expired one;
+- 409 `NOT_DRAFT` once it has been imported;
+- 422 `VALIDATION_FAILED`.
+
+The real backend should page `rows` (`?status=&page=`) for big files.
+
+### `POST /welcome/imports/{id}/commit`
+
+Body `{ "mode": "add" | "update", "idempotencyKey": "…" }`, also sent as the `Idempotency-Key` header.
+- **Partial import:** `new` rows go in. `update` rows go in only with `mode: "update"`. `error` rows don't, and are listed in the error file.
+- **Idempotent:** the same key again returns the first result. A different key on a committed job is 409 `NOT_DRAFT`.
+- Returns the summary with `result`.
+- Audited as `welcome.import.commit`, with `after` holding added, updated, failed and new guests.
+- The job keeps, for undo: what it created, what it changed (before and after), and the `rowVer` of each record it touched.
+
+**Error file.** The front end builds it from `rows` with `status = error`: the original cells, then "Row in the file" and "What to fix". It is saved as CSV, and **any cell that starts with `=`, `+`, `-` or `@` gets a leading `'`** so a spreadsheet never runs it (formula injection, EV-31).
+
+### `POST /welcome/imports/{id}/undo`
+
+Body `{ "force": false }`. Allowed for 30 days after commit (else 409 `UNDO_EXPIRED`). Undo:
+- removes the entries, logs and new guests it added, and the logs on those new guests;
+- puts back the entries it changed;
+- restores visit numbers and the returned flag on guests it touched, unless they changed since.
+
+If something it added was worked on since (follow-up saved on a new guest, a changed visit changed again, a new guest merged away), the answer is 409 `CHANGED_SINCE`, with `fields.changed` listing each item in plain words. The screen shows the list and asks again; `force: true` then undoes anyway (EV-28: "undo it only with a warning and a list").
+
+Other errors: 409 `ALREADY_UNDONE`, 409 `NOT_COMMITTED`. Audited as `welcome.import.undo`.
+
+### `DELETE /welcome/imports/{id}`
+
+Discards a draft: the staged file and fixes are deleted. Audited as `welcome.import.discard`. 409 `NOT_DRAFT` once imported (undo instead). The screen asks first.
+
+**Templates and samples.** The start screen offers a CSV template per kind: field names as headers and one fictional example row, so every column matches on upload. In mock mode it also links two **fictional** sample files in `public/samples/`:
+- `tkp-guests-sample.xlsx`: two sheets, a title row, messy headers, every kind of error;
+- `tkp-followups-sample.csv`: rows for the seeded duplicate guests, plus an unknown phone and an unknown caller.
+
+### The TKP Hub standard layout (adopted, 2026-11-25)
+
+The old follow-up tracker's export is not available, so TKP adopted the template's columns as **the** layout for any file brought in: the tracker export, old guest lists, and the welcome-desk spreadsheets. Files in this layout match every column with no checking. Other layouts still work through column matching.
+
+- **Past guest entries:** Service date, Service, First name, Last name, Phone, Email, Gender, Marital status, Age range, Address, City, State, ZIP, Country, How they heard about us, Who invited them, Will come again, Would like to become a member, Prayer request, Comments, Rating: Music, Rating: Preaching, Rating: Comfort, Rating: Hospitality, Rating: Church environment, Rating: The people, Rating: Parking, Rating: Traffic.
+- **Follow-up tracker records:** Date and time, Guest phone, Guest email, Guest name, Team, Caller, Method, Outcome, Wants membership, Life group, Note.
+
+Only the date (and, for follow-up records, a phone or email) is required; the rest may be left out or empty. The templates on the start screen are this layout, with one fictional example row. A test checks that every template column matches its field.
+
+**Defaults confirmed by TKP (2026-11-25):** dates are read month first (US), and new guests from a file are added as history (no follow-up starts). Both can still be changed per import.
+
+---
+
+## 12. Reports hub (M7)
+
+PRD PL-2 to PL-5, W-9 ("scheduled share to teams"), W-10, W-11, 8.3 ("reports hub, share a report, leadership monthly pack preview, executive snapshot"), and 8.2 ("rebuild the Power BI pages … replace manual PDF/CSV forwarding with scheduled report sharing"). Screens: Reports › Library (`/reports`), one report (`/reports/{id}`) and Reports › Schedules (`/reports/schedules`). The mock is `src/mocks/reports-api.ts`, with its tests in `src/mocks/reports-api.test.ts`.
+
+| Key | Who |
+|---|---|
+| `reports.view` | Everyone who sees LCM Metrics: Tech Admin, Tech Team, Lead Pastor, Church Admin, Church Office Admin, Integration Admin, Welcome Lead |
+| `reports.share` | Tech Admin, Church Admin, Integration Admin, Welcome Lead, Lead Pastor: share now, and create, change, pause, send and delete schedules |
+
+Each report also has its own key (below). The library lists only the reports the person may open.
+
+**Totals only, and groups under five are never shown alone (PL-1):**
+- cities with fewer than 5 guests (this year and last) fold into one row, `"Fewer than 5 each (N places)"`, with `grouped: N`;
+- a retention month with fewer than 5 first-time guests is `hidden: true`, with its numbers zeroed;
+- inviters with only one guest are left out, as in LCM.
+
+### The library
+
+| `id` | Report | Key | Where | Periods | Share as |
+|---|---|---|---|---|---|
+| `lcm-pack` | Leadership monthly pack | `welcome.lcm.view` | `/welcome/lcm` (§5) | last full month, this month so far | link, PDF |
+| `ratings-referrals` | Ratings and referrals (W-10) | `reports.view` | hub | last full month, last 3 / 6 full months, year to date | link, PDF, CSV |
+| `ytd-service-location` | Year to date by service and location (W-11, PL-2) | `reports.view` | hub | year to date | link, PDF, CSV |
+| `retention` | Retention (PL-3, C-13) | `reports.view` | hub | last 3 / 6 full months, year to date | link, PDF, CSV |
+| `team-metrics` | Follow-up team metrics | `connect.metrics.view` | `/connect/metrics` | n/a | not shared |
+| `executive` | Executive snapshot | `dashboard.view` | `/dashboard` | n/a | not shared |
+
+**Periods** are resolved in church time when the report runs:
+
+| Period | Months |
+|---|---|
+| `last_full_month` | Last month |
+| `month_to_date` | This month to today |
+| `last_3_months`, `last_6_months` | The full months before this one |
+| `year_to_date` | January to today |
+
+The answer carries `range: { from, to, label, inProgress }`, for example `"Aug – Oct 2026"`.
+
+### `GET /reports`
+
+Returns `{ reports: [ReportDef + { schedules, lastShared }], can: { share } }`.
+
+### `GET /reports/{id}?period=&type=`
+
+`type` filters by service. It must be a service from §8, else 422. A missing or wrong `period` falls back to the report's first period. Returns `{ id, data }`. Audited as `reports.view`.
+
+- **`ratings-referrals`:**
+  - `guests`, and `rated` (guests who rated at least one area).
+  - `ratings[]`: `{ area, average (0–10, a blank is no answer), rated, low (5 or below), owner }`, where `owner` is the department its low-rating alert goes to (§5).
+  - `howHeard[]`, `cities[]` (small places grouped) and `cells[]`, each `{ label, guests, share, grouped? }`.
+  - `inviters[]`: `{ name, guests }`, two or more guests, top 10.
+- **`ytd-service-location`:** first-time guests (`visitNumber = 1`) from 1 January to today, against the same days last year.
+  - `thisYear`, `lastYear`, and `byMonth[]` as `{ month, thisYear, lastYear }`.
+  - `byService[]`, `byCell[]` and `byCity[]` (small places grouped), each `{ label, guests, prior, grouped? }`.
+- **`retention`:** for each first-visit month in the period, first-time guests confirmed back within 30 days of their first visit.
+  - Each cohort is `{ month, firstTime, back, rate, viaForm, viaConnect, viaBoth, open, hidden }`, with `total: { firstTime, back, rate }`.
+  - **Signals:** `viaForm` means a later form entry from the same person; `viaConnect` means Connect "Returned for 2nd visit" with a return date in the window; `viaBoth` means both.
+  - `open`: guests whose 30 days aren't over and who aren't back yet.
+
+### `POST /reports/{id}/export`
+
+Body `{ "format": "pdf" | "csv", "period", "type" }`. The screen calls it **before** it prints or downloads, so every export is logged. Returns `{ "logged": true }`. Audited as `reports.export` (category exports).
+- The CSV is built by the front end from the same data, with the period on top. Cells starting with `= + - @` are prefixed with `'`.
+- The PDF uses the browser's print (the LCM print path).
+
+### Share now: `GET /reports/{id}/recipients` · `POST /reports/{id}/share`
+
+`recipients` lists active staff (not member-only accounts) as `{ id, name, roles, eligible, reason }`. **Only people who may open the report themselves are eligible**: a share never widens access.
+
+`share` takes `{ period, serviceType, format: "link" | "pdf" | "csv", recipients: [ids], message }` and returns 201 with the run. Audited as `reports.share` (category exports).
+
+**Errors:**
+- 422 `VALIDATION_FAILED`: `fields.recipients` lists, for example, "Naomi Bello can't open this report". Also returned for a period or format the report doesn't offer.
+- 422 `NOT_SHAREABLE`: team metrics and the executive snapshot.
+- 403 without `reports.share`.
+
+**Delivery (backend).** Email to each recipient's staff address:
+- `link`: a link to the report in TKP Hub; they sign in to see it. This is the default for anything personal.
+- `pdf` / `csv`: the file is attached, generated by the background job (PRD 4.4 "report exports", 8.2 "very large exports: background jobs, streaming, size caps").
+- Never sent to anyone outside the staff list.
+
+### Schedules: `/reports/schedules`
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `GET` | `{ items: Schedule[], runs: ReportRun[] (newest 30), can: { share } }`, limited to reports the person may open | |
+| `POST` | `{ reportId, name (2–80, unique), period, serviceType, frequency: "monthly" \| "weekly", day (monthly 1–28; weekly 0 = Sunday … 6), time ("HH:MM" church time), format, recipients, message }` → 201 | `reports.schedule.create` |
+| `PUT /{id}` | The same plus `rowVer`. 409 `CONFLICT` if stale | `reports.schedule.update` (changed fields only) |
+| `POST /{id}/pause` · `/resume` | `{ rowVer }` | `.pause` / `.resume` |
+| `POST /{id}/run` | Send now (the job does the same at `nextRunAt`) | `reports.schedule.run` (category exports) |
+| `DELETE /{id}` | The screen asks first. Runs already sent stay in the history | `reports.schedule.delete` |
+
+- **`Schedule`:** `{ id, reportId, reportTitle, name, period, serviceType, frequency, day, time, format, recipients: [{ id, name }], message, active, nextRunAt (null when paused), lastRun, createdBy, createdAt, rowVer }`.
+- **`ReportRun`:** `{ id, at, reportId, reportTitle, scheduleId, scheduleName, period (the resolved label), format, sentTo: [names], by ("Schedule" or a person), status: "sent" | "skipped", note }`.
+- **Days** stop at 28 so every month has one.
+- **Next run.** `nextRunAt` is the next church-time occurrence after now; daylight saving is handled.
+- **Recipients checked at send time.** Each run, and each send now, checks the recipients again. Anyone who can no longer open the report is skipped and named in `note`. If no one is left, the run is `skipped`.
+
+**Mock data:** two schedules ("LCM pack for the leadership council", monthly on the 2nd at 08:00, PDF to four people; and a paused weekly one), plus past runs. Separately, to give retention its follow-up signal, about one guest in nine has "Returned for 2nd visit" set, within four weeks of their first visit.
+
 **Open questions:**
-- **"Verified" contact.** The PRD says "verified phone or email". The welcome form doesn't verify either today, so matching uses the normalised values as given. Once guests confirm a code (portal sign-in), only verified values should match.
-- **Who decides.** Should the Welcome Lead be able to merge, or only see the list (the current setting)?
-- **Unmerge.** Is undoing a merge needed?
+- **Sender** and reply-to address for report emails.
+- **PDF attachments.** Should they be allowed, or links only? Links keep the numbers behind sign-in.
+- **Reconciliation.** The Power BI figures each hub report must match before Power BI is turned off (8.2).

@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { TriangleAlert } from "lucide-react";
+import { Printer, QrCode as QrIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
@@ -13,11 +13,16 @@ import { cn } from "@/lib/cn";
 import { fromChurchLocal, toChurchLocal } from "@/lib/time";
 import { DEST_ICON } from "./qr-parts";
 import { useCreateQr, useSetQrDates, useUpdateQr } from "./qr-queries";
-import { DESTINATION_LABEL, DESTINATIONS, NEEDS_TARGET, type DestinationType, type QrCode, type QrInput, type QrListResponse, type QrWarning } from "./qr-types";
+import { DESTINATION_LABEL, DESTINATIONS, NEEDS_TARGET, type DestinationType, type QrCode, type QrInput, type QrListResponse } from "./qr-types";
 
-/** Add, change and register QR codes; quick edit of the dates (PRD QR-1, QR-4, QR-7, QR-8). */
+/**
+ * Add and change QR codes; quick edit of the dates (PRD QR-1, QR-4, QR-7, QR-8).
+ * One "Add a QR code" form for both a new code and one already printed (TKP,
+ * 2026-11-25): an already-printed code takes the link it opens. Problems are
+ * errors that keep Save off until fixed; there are no warnings.
+ */
 
-export type QrDialogMode = { kind: "new" } | { kind: "legacy" } | { kind: "edit"; code: QrCode };
+export type QrDialogMode = { kind: "new" } | { kind: "edit"; code: QrCode };
 
 const HINT: Record<DestinationType, string> = {
   guest_form: "The full welcome form.",
@@ -43,9 +48,12 @@ const schema = z
     noExpiry: z.boolean(),
     caption: z.string().trim().max(60, "Keep the caption under 60 characters"),
     note: z.string().trim().max(500, "Keep the note under 500 characters"),
+    printed: z.boolean(),
     legacyUrl: z.string().trim(),
   })
   .superRefine((v, ctx) => {
+    if (v.printed && !/^https?:\/\/\S+\.\S+/.test(v.legacyUrl))
+      ctx.addIssue({ code: "custom", path: ["legacyUrl"], message: v.legacyUrl ? "Enter the full link, starting with https://" : "Paste the link the printed code opens" });
     if (NEEDS_TARGET.includes(v.destination) && !v.targetId)
       ctx.addIssue({ code: "custom", path: ["targetId"], message: v.destination === "event" ? "Choose the event" : "Choose the course" });
     if (!v.noExpiry && !v.expiresAt) ctx.addIssue({ code: "custom", path: ["expiresAt"], message: "Choose the expiry, or tick No expiry" });
@@ -64,6 +72,7 @@ const EMPTY: Values = {
   noExpiry: true,
   caption: "",
   note: "",
+  printed: false,
   legacyUrl: "",
 };
 const toValues = (c: QrCode): Values => ({
@@ -76,7 +85,8 @@ const toValues = (c: QrCode): Values => ({
   noExpiry: !c.expiresAt,
   caption: c.caption,
   note: c.note,
-  legacyUrl: "",
+  printed: c.legacy,
+  legacyUrl: c.legacy ? c.shortUrl : "",
 });
 
 const body = (v: Values): QrInput => ({
@@ -90,41 +100,27 @@ const body = (v: Values): QrInput => ({
   note: v.note.trim(),
 });
 
-/** Ask the server for QR-8 warnings once the form has been still for a moment. */
-function useWarnings(enabled: boolean, input: Partial<QrInput> & { id?: string }) {
+/** Check the dates against the linked service once the form has been still for a moment (QR-8). The answer is an error, never a warning. */
+function useDateCheck(enabled: boolean, input: Partial<QrInput> & { id?: string }) {
   const key = JSON.stringify(input);
   const [settled, setSettled] = useState(key);
   useEffect(() => {
     const t = window.setTimeout(() => setSettled(key), 400);
     return () => window.clearTimeout(t);
   }, [key]);
-  return useQuery({
+  const q = useQuery({
     queryKey: ["qr", "check", settled],
     queryFn: ({ signal }) => api.qr.check(JSON.parse(settled) as Partial<QrInput>, signal),
     enabled,
     placeholderData: (prev) => prev,
   });
-}
-
-export function Warnings({ items }: { items: QrWarning[] }) {
-  if (!items.length) return null;
-  return (
-    <div role="status" className="rounded-2xl border border-warn/25 bg-warn/8 px-4 py-3">
-      <p className="mb-1 flex items-center gap-1.5 text-sm font-bold text-warn">
-        <TriangleAlert className="size-4" aria-hidden /> {items.length === 1 ? "Check this" : "Check these"} (you can still save)
-      </p>
-      <ul className="space-y-0.5 text-xs text-ink">
-        {items.map((w, i) => (
-          <li key={i}>{w.message}</li>
-        ))}
-      </ul>
-    </div>
-  );
+  // Until the latest values are checked, Save waits.
+  const pending = enabled && (settled !== key || q.isFetching);
+  return { expiresAt: q.data?.fields.expiresAt ?? null, pending };
 }
 
 export function QrDialog({ mode, list, onClose }: { mode: QrDialogMode | null; list: QrListResponse; onClose: () => void }) {
   const editing = mode?.kind === "edit" ? mode.code : null;
-  const legacy = mode?.kind === "legacy";
   const create = useCreateQr();
   const update = useUpdateQr();
   const toast = useToast();
@@ -147,19 +143,22 @@ export function QrDialog({ mode, list, onClose }: { mode: QrDialogMode | null; l
   }, [mode, editing, reset]);
 
   const v = watch();
-  const warnings = useWarnings(!!mode, { ...body(v), ...(editing ? { id: editing.id } : {}) });
+  const legacy = editing ? editing.legacy : v.printed;
+  const check = useDateCheck(!!mode, { ...body(v), ...(editing ? { id: editing.id } : {}) });
+  const blocked = !!check.expiresAt;
 
   const submit = (draft: boolean) =>
     handleSubmit(async (values) => {
       setBanner(null);
+      if (check.expiresAt) return setError("expiresAt", { message: check.expiresAt });
       setAsDraft(draft);
       try {
         if (editing) {
           await update.mutateAsync({ id: editing.id, body: { ...body(values), rowVer: editing.rowVer } });
           toast.show(`${values.name.trim()} saved. Printed copies keep working.`);
         } else {
-          await create.mutateAsync({ ...body(values), draft, ...(legacy ? { legacyUrl: values.legacyUrl } : {}) });
-          toast.show(legacy ? `${values.name.trim()} registered` : draft ? `${values.name.trim()} saved as a draft` : `${values.name.trim()} added`);
+          await create.mutateAsync({ ...body(values), draft: draft && !values.printed, ...(values.printed ? { legacyUrl: values.legacyUrl } : {}) });
+          toast.show(values.printed ? `${values.name.trim()} added. The printed copies keep working.` : draft ? `${values.name.trim()} saved as a draft` : `${values.name.trim()} added`);
         }
         onClose();
       } catch (e) {
@@ -181,21 +180,26 @@ export function QrDialog({ mode, list, onClose }: { mode: QrDialogMode | null; l
     <Dialog
       open={!!mode}
       onClose={onClose}
-      subtitle={editing ? "Change QR code" : legacy ? "Register a printed code" : "Add a QR code"}
-      title={editing ? editing.name : legacy ? "A code that is already printed" : "New QR code"}
+      subtitle={editing ? "Change QR code" : "Add a QR code"}
+      title={editing ? editing.name : "New QR code"}
       className="max-w-2xl"
       footer={
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {blocked ? (
+            <p role="alert" className="text-xs font-semibold text-crit sm:mr-auto">
+              Fix the expiry to save: the code must keep working until its service ends.
+            </p>
+          ) : null}
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           {!editing && !legacy ? (
-            <Button variant="ghost" onClick={() => void submit(true)} loading={isSubmitting && asDraft}>
+            <Button variant="ghost" onClick={() => void submit(true)} loading={isSubmitting && asDraft} disabled={blocked || check.pending} disabledReason={blocked ? "Fix the expiry first" : undefined}>
               Save as draft
             </Button>
           ) : null}
-          <Button onClick={() => void submit(false)} loading={isSubmitting && !asDraft}>
-            {editing ? "Save changes" : legacy ? "Register code" : "Add and turn on"}
+          <Button onClick={() => void submit(false)} loading={isSubmitting && !asDraft} disabled={blocked || check.pending} disabledReason={blocked ? "Fix the expiry first" : undefined}>
+            {editing ? "Save changes" : legacy ? "Add printed code" : "Add and turn on"}
           </Button>
         </div>
       }
@@ -213,11 +217,42 @@ export function QrDialog({ mode, list, onClose }: { mode: QrDialogMode | null; l
             {banner}
           </p>
         ) : null}
-        {legacy ? (
-          <p className="rounded-xl bg-cream-200 px-4 py-3 text-xs text-muted">
-            For the code printed today (PRD QR-7). It keeps its address, so the copies already around the church keep working through the move to TKP Hub. You can
-            give it dates later.
-          </p>
+        {!editing ? (
+          <Controller
+            control={control}
+            name="printed"
+            render={({ field }) => (
+              <fieldset>
+                <legend className="mb-1.5 text-sm font-bold text-ink">Is this code already printed?</legend>
+                <div className="grid gap-2 sm:grid-cols-2" role="radiogroup">
+                  {(
+                    [
+                      [false, QrIcon, "No, make a new code", "TKP Hub gives it a short link to print."],
+                      [true, Printer, "Yes, it's already printed", "Add the link it opens, so the copies around the church keep working."],
+                    ] as const
+                  ).map(([val, Icon, label, hint]) => {
+                    const on = field.value === val;
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => field.onChange(val)}
+                        className={cn("flex items-start gap-2.5 rounded-2xl border p-3 text-left transition-colors", on ? "border-maroon-600 bg-maroon-100/40" : "border-line bg-white hover:border-maroon-200")}
+                      >
+                        <Icon className={cn("mt-0.5 size-4.5 shrink-0", on ? "text-maroon-700" : "text-muted")} aria-hidden />
+                        <span>
+                          <span className="block text-sm font-bold text-ink">{label}</span>
+                          <span className="block text-xs text-muted">{hint}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            )}
+          />
         ) : null}
         {editing && !editing.legacy ? (
           <p className="rounded-xl bg-cream-200 px-4 py-3 text-xs text-muted">
@@ -231,8 +266,22 @@ export function QrDialog({ mode, list, onClose }: { mode: QrDialogMode | null; l
         </Field>
 
         {legacy ? (
-          <Field label="Address on the printed code" htmlFor="qr-legacy" error={errors.legacyUrl?.message} hint="Scan the printed code with a phone and copy the address it opens.">
-            <input id="qr-legacy" type="url" inputMode="url" placeholder="https://" autoComplete="off" className={inputClass(!!errors.legacyUrl)} {...register("legacyUrl")} />
+          <Field
+            label="Link on the printed code"
+            htmlFor="qr-legacy"
+            error={errors.legacyUrl?.message}
+            hint={editing ? "The printed copies keep this link. It can't be changed." : "Scan the printed code with a phone and copy the link it opens."}
+          >
+            <input
+              id="qr-legacy"
+              type="url"
+              inputMode="url"
+              placeholder="https://"
+              autoComplete="off"
+              readOnly={!!editing}
+              className={cn(inputClass(!!errors.legacyUrl), editing && "bg-cream-100 text-muted")}
+              {...register("legacyUrl")}
+            />
           </Field>
         ) : null}
 
@@ -294,7 +343,7 @@ export function QrDialog({ mode, list, onClose }: { mode: QrDialogMode | null; l
             label={<>Service <span className="font-semibold text-muted">(optional)</span></>}
             htmlFor="qr-service"
             error={errors.serviceId?.message}
-            hint="The service it is for. You are warned if the code stops before it."
+            hint="The service it is for. The code must keep working until that service ends."
           >
             <select id="qr-service" className={selectClass(!!v.serviceId)} {...register("serviceId")}>
               <option value="">No particular service</option>
@@ -316,7 +365,7 @@ export function QrDialog({ mode, list, onClose }: { mode: QrDialogMode | null; l
               <input id="qr-from" type="datetime-local" className={inputClass(!!errors.activeFrom)} {...register("activeFrom")} />
             </Field>
             <div>
-              <Field label="Expires" htmlFor={v.noExpiry ? "qr-noexp" : "qr-to"} error={errors.expiresAt?.message}>
+              <Field label="Expires" htmlFor={v.noExpiry ? "qr-noexp" : "qr-to"} error={check.expiresAt ?? errors.expiresAt?.message}>
                 {v.noExpiry ? (
                   <p className="flex h-11 items-center rounded-xl border border-dashed border-line px-3.5 text-sm text-muted">Keeps working until you pause it</p>
                 ) : (
@@ -330,8 +379,6 @@ export function QrDialog({ mode, list, onClose }: { mode: QrDialogMode | null; l
             </div>
           </div>
         </fieldset>
-
-        <Warnings items={warnings.data?.warnings ?? []} />
 
         <Field label="Caption" htmlFor="qr-caption" error={errors.caption?.message} hint="Printed with the code. Leave empty for the usual wording.">
           <input id="qr-caption" autoComplete="off" placeholder="New here? Scan to say hello" className={inputClass(!!errors.caption)} {...register("caption")} />
@@ -365,7 +412,7 @@ export function QrDatesDialog({ code, onClose }: { code: QrCode | null; onClose:
     setErrorText(null);
   }, [code]);
 
-  const warnings = useWarnings(!!code, {
+  const check = useDateCheck(!!code, {
     id: code?.id,
     destination: code?.destination,
     targetId: code?.targetId,
@@ -385,6 +432,7 @@ export function QrDatesDialog({ code, onClose }: { code: QrCode | null; onClose:
     setErrorText(null);
     if (!noExpiry && !until) return setErrorText("Choose the expiry, or tick No expiry");
     if (!noExpiry && from && until <= from) return setErrorText("The expiry must be after the start");
+    if (check.expiresAt) return;
     try {
       const r = await save.mutateAsync({ id: code.id, body: { activeFrom: toUtc(from), expiresAt: noExpiry ? null : toUtc(until), rowVer: code.rowVer } });
       toast.show(code.status === "expired" && r.code.status !== "expired" ? `${code.name} renewed` : "Dates saved");
@@ -406,7 +454,7 @@ export function QrDatesDialog({ code, onClose }: { code: QrCode | null; onClose:
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => void onSave()} loading={save.isPending}>
+          <Button onClick={() => void onSave()} loading={save.isPending} disabled={!!check.expiresAt || check.pending} disabledReason={check.expiresAt ? "Fix the expiry first" : undefined}>
             {code?.status === "expired" ? "Save and renew" : "Save dates"}
           </Button>
         </div>
@@ -425,7 +473,7 @@ export function QrDatesDialog({ code, onClose }: { code: QrCode | null; onClose:
           <input id="qd-from" data-autofocus type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} className={inputClass()} />
         </Field>
         <div>
-          <Field label="Expires" htmlFor="qd-to">
+          <Field label="Expires" htmlFor="qd-to" error={check.expiresAt ?? undefined}>
             <input id="qd-to" type="datetime-local" value={until} disabled={noExpiry} onChange={(e) => setUntil(e.target.value)} className={inputClass()} />
           </Field>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -445,7 +493,6 @@ export function QrDatesDialog({ code, onClose }: { code: QrCode | null; onClose:
             ))}
           </div>
         </div>
-        <Warnings items={warnings.data?.warnings ?? []} />
       </div>
     </Dialog>
   );

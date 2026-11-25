@@ -22,6 +22,11 @@ const LookupPage = lazy(() => import("@/features/welcome/LookupPage").then((m) =
 const LcmPage = lazy(() => import("@/features/welcome/LcmPage").then((m) => ({ default: m.LcmPage })));
 const QrCodesPage = lazy(() => import("@/features/welcome/QrCodesPage").then((m) => ({ default: m.QrCodesPage })));
 const DuplicatesPage = lazy(() => import("@/features/welcome/DuplicatesPage").then((m) => ({ default: m.DuplicatesPage })));
+const ImportsPage = lazy(() => import("@/features/welcome/ImportsPage").then((m) => ({ default: m.ImportsPage })));
+const ImportWizardPage = lazy(() => import("@/features/welcome/ImportWizardPage").then((m) => ({ default: m.ImportWizardPage })));
+const ReportsPage = lazy(() => import("@/features/reports/ReportsPage").then((m) => ({ default: m.ReportsPage })));
+const ReportPage = lazy(() => import("@/features/reports/ReportPage").then((m) => ({ default: m.ReportPage })));
+const SchedulesPage = lazy(() => import("@/features/reports/SchedulesPage").then((m) => ({ default: m.SchedulesPage })));
 const QrPrintPage = lazy(() => import("@/features/welcome/QrPrintPage").then((m) => ({ default: m.QrPrintPage })));
 const QueuePage = lazy(() => import("@/features/connect/QueuePage").then((m) => ({ default: m.QueuePage })));
 const LogPage = lazy(() => import("@/features/connect/LogPage").then((m) => ({ default: m.LogPage })));
@@ -117,6 +122,16 @@ export const router = createBrowserRouter([
           { path: "qr", element: page("qr.view", <QrCodesPage />) },
           { path: "qr/print", element: page("qr.print", <QrPrintPage />) },
           { path: "duplicates", element: page("welcome.duplicates.view", <DuplicatesPage />) },
+          { path: "import", element: page("welcome.import", <ImportsPage />) },
+          { path: "import/:id", element: page("welcome.import", <ImportWizardPage />) },
+        ],
+      },
+      {
+        path: "reports",
+        children: [
+          { index: true, element: page("reports.view", <ReportsPage />) },
+          { path: "schedules", element: page("reports.view", <SchedulesPage />) },
+          { path: ":id", element: page("reports.view", <ReportPage />) },
         ],
       },
       {

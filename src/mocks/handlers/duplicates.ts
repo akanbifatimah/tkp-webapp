@@ -1,7 +1,7 @@
 import { http } from "msw";
 import type { MergeInput } from "@/features/welcome/duplicate-types";
 import { authenticate, latency, path } from "../http";
-import { dismissDuplicates, listDuplicates, mergeDuplicates, restoreDuplicate } from "../duplicates-api";
+import { dismissDuplicates, listDuplicates, mergeDuplicates, restoreDuplicate, unmergeDuplicates } from "../duplicates-api";
 import { send } from "./connect";
 
 /** HTTP wrappers around the mock duplicate review (docs/API.md §10). */
@@ -21,6 +21,13 @@ export const duplicateHandlers = [
     const auth = authenticate(request);
     if (auth instanceof Response) return auth;
     return send(mergeDuplicates(auth.user, await body<Partial<MergeInput>>(request)));
+  }),
+
+  http.post(path(`${R}/merges/:id/undo`), async ({ request, params }) => {
+    await latency();
+    const auth = authenticate(request);
+    if (auth instanceof Response) return auth;
+    return send(unmergeDuplicates(auth.user, String(params.id)));
   }),
 
   http.post(path(`${R}/dismiss`), async ({ request }) => {

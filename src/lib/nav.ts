@@ -3,6 +3,7 @@ import {
   BookOpen,
   Compass,
   Crown,
+  FileChartColumn,
   HandHeart,
   HeartHandshake,
   Home,
@@ -67,6 +68,8 @@ export const NAV: NavGroup[] = [
       { label: "QR codes", to: "/welcome/qr", permission: "qr.view" },
       // PRD W-14 / WT-7: duplicate review and merge.
       { label: "Duplicates", to: "/welcome/duplicates", permission: "welcome.duplicates.view" },
+      // PRD W-16 / WT-7: the import wizard and its history.
+      { label: "Import", to: "/welcome/import", permission: "welcome.import" },
     ],
   },
   {
@@ -85,6 +88,18 @@ export const NAV: NavGroup[] = [
       { label: "Guest journey", to: "/connect/journey", permission: "connect.journey.view" },
       { label: "Phase board", to: "/connect/board", permission: "connect.phaseBoard.view" },
       { label: "Team metrics", to: "/connect/metrics", permission: "connect.metrics.view" },
+    ],
+  },
+  {
+    // PRD PL-5, 8.3: the Reports hub, for leadership and the admins.
+    id: "reports",
+    label: "Reports",
+    icon: FileChartColumn,
+    to: "/reports",
+    permission: "reports.view",
+    tabs: [
+      { label: "Library", to: "/reports", permission: "reports.view", end: true },
+      { label: "Schedules", to: "/reports/schedules", permission: "reports.view" },
     ],
   },
   { id: "belong", step: 3, label: "Belong", icon: Users, to: "/belong", permission: "belong.view", planned: true },

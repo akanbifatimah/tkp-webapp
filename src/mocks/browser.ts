@@ -6,10 +6,12 @@ import { connectHandlers } from "./handlers/connect";
 import { lcmHandlers } from "./handlers/lcm";
 import { planHandlers } from "./handlers/plans";
 import { duplicateHandlers } from "./handlers/duplicates";
+import { importHandlers } from "./handlers/imports";
+import { reportHandlers } from "./handlers/reports";
 import { qrHandlers } from "./handlers/qr";
 import { welcomeHandlers } from "./handlers/welcome";
 
-export const handlers = [...authHandlers, ...connectHandlers, ...welcomeHandlers, ...lcmHandlers, ...planHandlers, ...adminHandlers, ...configHandlers, ...qrHandlers, ...duplicateHandlers];
+export const handlers = [...authHandlers, ...connectHandlers, ...welcomeHandlers, ...lcmHandlers, ...planHandlers, ...adminHandlers, ...configHandlers, ...qrHandlers, ...duplicateHandlers, ...importHandlers, ...reportHandlers];
 
 export async function startMocks() {
   const worker = setupWorker(...handlers);

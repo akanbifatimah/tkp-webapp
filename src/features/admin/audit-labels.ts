@@ -34,6 +34,20 @@ export const ACTION_LABEL: Record<string, string> = {
   "welcome.qr.print": "Printed QR codes",
   "welcome.duplicates.view": "Opened duplicate guests",
   "welcome.duplicates.merge": "Merged duplicate guests",
+  "welcome.duplicates.unmerge": "Undid a merge",
+  "welcome.import.upload": "Uploaded a file to import",
+  "welcome.import.commit": "Imported a file",
+  "welcome.import.undo": "Undid an import",
+  "welcome.import.discard": "Discarded an import",
+  "reports.view": "Opened a report",
+  "reports.export": "Exported a report",
+  "reports.share": "Shared a report",
+  "reports.schedule.create": "Scheduled a report",
+  "reports.schedule.update": "Changed a report schedule",
+  "reports.schedule.pause": "Paused a report schedule",
+  "reports.schedule.resume": "Turned on a report schedule",
+  "reports.schedule.run": "Sent a scheduled report now",
+  "reports.schedule.delete": "Deleted a report schedule",
   "welcome.duplicates.dismiss": "Marked guests as not the same person",
   "welcome.duplicates.restore": "Put a pair back for review",
   "connect.assign": "Assigned a guest",
@@ -54,8 +68,8 @@ export const actionLabel = (a: string) => ACTION_LABEL[a] ?? a;
 
 /** Tone for the action chip: red for failures and removals, gold for exports and admin changes. */
 export function actionTone(a: string): "crit" | "gold" | "maroon" | "neutral" {
-  if (["sign_in_failed", "mfa.failed", "user.deactivate", "user.sessions.revoke", "welcome.cellmap.remove", "welcome.service.delete", "welcome.service.retire", "welcome.qr.delete", "welcome.qr.pause", "welcome.duplicates.merge"].includes(a)) return "crit";
-  if (a.endsWith(".export") || a.startsWith("user.") || a.startsWith("settings.") || a.startsWith("welcome.cellmap.") || a.startsWith("welcome.service.") || a.startsWith("welcome.qr.") || a.startsWith("welcome.duplicates.")) return "gold";
+  if (["sign_in_failed", "mfa.failed", "user.deactivate", "user.sessions.revoke", "welcome.cellmap.remove", "welcome.service.delete", "welcome.service.retire", "welcome.qr.delete", "welcome.qr.pause", "welcome.duplicates.merge", "welcome.import.undo", "reports.schedule.delete", "reports.schedule.pause"].includes(a)) return "crit";
+  if (a.endsWith(".export") || a.startsWith("user.") || a.startsWith("settings.") || a.startsWith("welcome.cellmap.") || a.startsWith("welcome.service.") || a.startsWith("welcome.qr.") || a.startsWith("welcome.duplicates.") || a.startsWith("welcome.import.") || (a.startsWith("reports.") && a !== "reports.view")) return "gold";
   if (a.startsWith("sign_") || a.startsWith("mfa.") || a.startsWith("password.")) return "neutral";
   return "maroon";
 }
@@ -116,4 +130,17 @@ export const FIELD_LABEL: Record<string, string> = {
   city: "City",
   zip: "ZIP",
   visits: "Visits",
+  journeyKept: "Kept the current journey",
+  rows: "Rows",
+  added: "Added",
+  updated: "Updated",
+  failed: "Not imported",
+  newGuests: "New guests",
+  changedSince: "Worked on since",
+  report: "Report",
+  period: "Period",
+  when: "When",
+  format: "Format",
+  recipients: "Sent to",
+  serviceType: "Service",
 };

@@ -1,4 +1,4 @@
-import { CalendarClock, History, Pause, Pencil, Play, Plus, Power, Printer, QrCode as QrIcon, Search, Trash2, TriangleAlert } from "lucide-react";
+import { CalendarClock, Pause, Pencil, Play, Plus, Power, Printer, QrCode as QrIcon, Search, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -73,14 +73,10 @@ export function QrCodesPage() {
                 </Button>
               ) : null}
               {d.can.manage ? (
-                <>
-                  <Button variant="ghost" icon={<History className="size-4" />} onClick={() => setDialog({ kind: "legacy" })}>
-                    Register a printed code
-                  </Button>
-                  <Button icon={<Plus className="size-4" />} onClick={() => setDialog({ kind: "new" })}>
-                    Add a QR code
-                  </Button>
-                </>
+                // One way in (TKP, 2026-11-25): the form asks whether the code is already printed.
+                <Button icon={<Plus className="size-4" />} onClick={() => setDialog({ kind: "new" })}>
+                  Add a QR code
+                </Button>
               ) : null}
             </>
           ) : null
@@ -242,12 +238,6 @@ function QrRow({
             </button>
             <QrStatusChip status={c.status} />
             {c.legacy ? <Chip tone="maroon">Already printed</Chip> : null}
-            {c.warnings.length ? (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-warn">
-                <TriangleAlert className="size-3.5" aria-hidden />
-                {c.warnings.length === 1 ? "1 warning" : `${c.warnings.length} warnings`}
-              </span>
-            ) : null}
           </p>
           <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-muted">
             <Icon className="size-4 shrink-0 text-gold-600" aria-hidden />

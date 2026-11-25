@@ -10,7 +10,6 @@ import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
 import { env } from "@/lib/env";
 import { formatStamp, formatWhen, serviceDateShort } from "@/lib/time";
-import { Warnings } from "./QrDialogs";
 import { QrImage } from "./QrImage";
 import { CopyButton, DEST_ICON, QrStatusChip, datesText, shortText } from "./qr-parts";
 import { qrKeys, useQrDetail } from "./qr-queries";
@@ -105,8 +104,6 @@ export function QrDetailDrawer({
               <ScanNow code={c} />
             </div>
           </div>
-
-          <Warnings items={c.warnings} />
 
           <Facts code={c} />
 

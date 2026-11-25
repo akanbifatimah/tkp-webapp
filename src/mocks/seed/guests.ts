@@ -444,6 +444,18 @@ export function seedConnect() {
     }
   }
 
+  // The follow-up team confirmed some returns without a second form (Connect "Returned for 2nd visit"):
+  // about one in nine, a week to four weeks later. Worked out from the id, so no random draw moves.
+  // Feeds the Reports hub retention signals and LCM "Came back".
+  for (const r of records) {
+    if (r.connectId % 9 !== 0 || r.status === "Closed" || r.state.returned2ndVisit) continue;
+    const back = ALL_SERVICE_DATES.filter((d) => d > r.entry.serviceDate && d < TODAY && Date.parse(d) - Date.parse(r.entry.serviceDate) <= (7 + (r.connectId % 4) * 7) * 24 * HOUR).at(-1);
+    if (back) {
+      r.state.returned2ndVisit = true;
+      r.state.returnVisitDate = back;
+    }
+  }
+
   // Repeat entries: some people filled in the form again on a later visit (BR-02/03:
   // same person by phone, no second journey; Welcome counts the visit number).
   const entries: WelcomeEntry[] = records.map((r) => ({ ...r.entry, connectId: r.connectId, legacyNotes: r.legacyNotes }));

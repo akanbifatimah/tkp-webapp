@@ -104,13 +104,30 @@ describe("landing and navigation", () => {
     for (const r of ["church_office_admin", "church_office", "integration_team", "tkp_member"] as Role[]) expect(can(r, "qr.view")).toBe(false);
   });
 
-  it("M7 duplicates (PRD W-14): the admins merge; the welcome lead and Tech Team only see the list", () => {
-    for (const r of ["tech_admin", "church_admin", "integration_admin"] as Role[]) expect(can(r, "welcome.duplicates.merge")).toBe(true);
-    for (const r of ["welcome_lead", "tech_team"] as Role[]) {
-      expect(can(r, "welcome.duplicates.view")).toBe(true);
-      expect(can(r, "welcome.duplicates.merge")).toBe(false);
-    }
+  it("M7 duplicates (PRD W-14): the admins and the welcome lead merge; Tech Team only sees the list", () => {
+    for (const r of ["tech_admin", "church_admin", "integration_admin", "welcome_lead"] as Role[]) expect(can(r, "welcome.duplicates.merge")).toBe(true);
+    expect(can("tech_team", "welcome.duplicates.view")).toBe(true);
+    expect(can("tech_team", "welcome.duplicates.merge")).toBe(false);
     for (const r of ["lead_pastor", "welcome_team", "church_office_admin", "integration_team", "tkp_member"] as Role[]) expect(can(r, "welcome.duplicates.view")).toBe(false);
+  });
+
+  it("M7 Reports hub (PRD PL-4, PL-5): everyone who sees LCM sees it; leadership and the admins share", () => {
+    for (const r of ["tech_admin", "church_admin", "integration_admin", "welcome_lead", "lead_pastor"] as Role[]) expect(can(r, "reports.share")).toBe(true);
+    for (const r of ["tech_team", "church_office_admin"] as Role[]) {
+      expect(can(r, "reports.view")).toBe(true);
+      expect(can(r, "reports.share")).toBe(false);
+    }
+    for (const r of ["welcome_team", "church_office", "integration_team", "tkp_member"] as Role[]) expect(can(r, "reports.view")).toBe(false);
+  });
+
+  it("M7 import wizard (PRD W-16): the admins import both kinds; the Welcome Lead imports guest entries", () => {
+    for (const r of ["tech_admin", "church_admin", "integration_admin"] as Role[]) {
+      expect(can(r, "welcome.import")).toBe(true);
+      expect(can(r, "welcome.import.followups")).toBe(true);
+    }
+    expect(can("welcome_lead", "welcome.import")).toBe(true);
+    expect(can("welcome_lead", "welcome.import.followups")).toBe(false);
+    for (const r of ["tech_team", "lead_pastor", "welcome_team", "church_office_admin", "integration_team", "tkp_member"] as Role[]) expect(can(r, "welcome.import")).toBe(false);
   });
 
   it("M6: Tech Admin and Church Admin land on the dashboard", () => {

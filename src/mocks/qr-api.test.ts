@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Result } from "./connect-api";
 import { db } from "./db";
-import { checkQr, createQr, deleteQr, getQr, listQr, logPrint, resolveQr, setQrDates, setQrState, statusOf, updateQr, warningsFor } from "./qr-api";
+import { checkQr, createQr, deleteQr, getQr, listQr, logPrint, resolveQr, setQrDates, setQrState, statusOf, updateQr, expiryProblem } from "./qr-api";
 
 /** M7 step 2: QR codes (PRD 5.8, QR-1 to QR-10). docs/API.md §9. */
 const user = (id: string) => db.staff.find((s) => s.id === id)!;
@@ -131,32 +131,43 @@ describe("change, quick edit, renew (QR-4, QR-9)", () => {
   });
 });
 
-describe("warnings (QR-8): warn, never block", () => {
-  it("two live codes for the same destination warn each other", () => {
-    const r = listQr(user(CHURCH_ADMIN));
-    if (!r.ok) throw new Error(r.message);
-    const desk = r.body.items.find((c) => c.id === "qr-2")!;
-    expect(desk.warnings.some((w) => w.kind === "overlap" && w.otherId === "qr-1")).toBe(true);
+describe("QR-8 as TKP decided: errors that block saving, no warnings", () => {
+  it("two codes for the same place are normal: no error, no warning", () => {
+    const r = createQr(user(CHURCH_ADMIN), { name: "Second welcome card", destination: "guest_form" });
+    expect(r.ok).toBe(true);
+    const list = listQr(user(CHURCH_ADMIN));
+    expect(list.ok && "warnings" in list.body.items[0]!).toBe(false);
   });
 
-  it("an event code that stops before the event ends", () => {
-    const w = warningsFor(rec("qr-3"), new Date("2026-11-23T18:00:00Z"));
-    expect(w).toEqual([expect.objectContaining({ kind: "expires_before_service", serviceId: "svc-5" })]);
+  it("an event code must run until the event ends", () => {
+    const now = new Date("2026-11-23T18:00:00Z");
+    expect(expiryProblem(rec("qr-3"), now)).toBeNull();
+    expect(expiryProblem({ ...rec("qr-3"), expiresAt: "2027-01-09T04:00:00.000Z" }, now)).toMatch(/^It would stop before 168 Hours of Praise ends/);
+    const c = rec("qr-3");
+    const r = setQrDates(user(CHURCH_ADMIN), "qr-3", { activeFrom: c.activeFrom, expiresAt: "2027-01-09T04:00:00.000Z", rowVer: c.rowVer }, now);
+    expect(code(r)).toBe("VALIDATION_FAILED");
+    expect(!r.ok && r.fields?.expiresAt?.[0]).toMatch(/168 Hours of Praise/);
   });
 
-  it("a code linked to a weekly service that expires before the next one, or during it", () => {
+  it("a code for a weekly service must not stop before or during the next one", () => {
     // Sunday 1st Service, 9:30 am Central = 15:30 UTC on Sun Nov 29, 2026.
     const now = new Date("2026-11-25T18:00:00Z");
-    const base = { id: "", destination: "plan_visit" as const, targetId: null, serviceId: "svc-1", activeFrom: null };
-    const svc = (expiresAt: string) => warningsFor({ ...base, expiresAt }, now).filter((w) => w.kind === "expires_before_service");
-    expect(svc("2026-11-28T18:00:00Z")[0]?.message).toMatch(/^Stops working before the next Sunday 1st Service/);
-    expect(svc("2026-11-29T16:00:00Z")[0]?.message).toMatch(/^Stops working during Sunday 1st Service/);
-    expect(svc("2026-11-29T18:00:00Z")).toEqual([]);
+    const base = { destination: "plan_visit" as const, targetId: null, serviceId: "svc-1", activeFrom: null };
+    expect(expiryProblem({ ...base, expiresAt: "2026-11-28T18:00:00Z" }, now)).toMatch(/^It would stop before the next Sunday 1st Service/);
+    expect(expiryProblem({ ...base, expiresAt: "2026-11-29T16:00:00Z" }, now)).toMatch(/^It would stop during Sunday 1st Service/);
+    expect(expiryProblem({ ...base, expiresAt: "2026-11-29T18:00:00Z" }, now)).toBeNull();
+    expect(expiryProblem({ ...base, expiresAt: null }, now)).toBeNull();
+    const r = createQr(user(CHURCH_ADMIN), { name: "Too short", destination: "plan_visit", serviceId: "svc-1", expiresAt: "2026-11-28T18:00:00Z" }, now);
+    expect(code(r)).toBe("VALIDATION_FAILED");
+    expect(!r.ok && Object.keys(r.fields ?? {})).toEqual(["expiresAt"]);
   });
 
-  it("the form can check before saving", () => {
-    const r = checkQr(user(CHURCH_ADMIN), { destination: "guest_form" });
-    expect(r.ok && r.body.warnings.length).toBeGreaterThan(0);
+  it("the form checks before saving", () => {
+    const now = new Date("2026-11-25T18:00:00Z");
+    const bad = checkQr(user(CHURCH_ADMIN), { destination: "plan_visit", serviceId: "svc-1", expiresAt: "2026-11-28T18:00:00Z" }, now);
+    expect(bad.ok && bad.body.fields.expiresAt).toMatch(/Sunday 1st Service/);
+    const fine = checkQr(user(CHURCH_ADMIN), { destination: "guest_form" }, now);
+    expect(fine.ok && fine.body.fields).toEqual({});
   });
 });
 

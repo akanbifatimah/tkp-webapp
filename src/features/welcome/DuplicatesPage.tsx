@@ -1,4 +1,4 @@
-import { Check, GitMerge, RotateCcw, TriangleAlert, UserX, Users } from "lucide-react";
+import { Check, GitMerge, History, RotateCcw, TriangleAlert, Undo2, UserX, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -11,21 +11,23 @@ import { cn } from "@/lib/cn";
 import { stagger } from "@/lib/motion";
 import { serviceDateShort } from "@/lib/time";
 import { MergeDialog } from "./DuplicateMerge";
-import { useDismissDuplicates, useDuplicates, useRestoreDuplicate } from "./duplicate-queries";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { formatWhen } from "@/lib/time";
+import { useDismissDuplicates, useDuplicates, useRestoreDuplicate, useUnmerge } from "./duplicate-queries";
 import { JourneyChip, ReasonChips, callers } from "./duplicate-parts";
-import type { DismissedPair, DuplicateGroup } from "./duplicate-types";
+import type { DismissedPair, DuplicateGroup, MergeHistory } from "./duplicate-types";
 
 /**
  * Welcome › Duplicates (PRD W-14, A-1, WT-7). The same person with two or more
  * records, found by a shared phone or email, never by name. Tech Admin, Church
- * Admin and Integration Admin merge them or mark them "not the same person";
- * the welcome lead and Tech Team see the list.
+ * Admin, Integration Admin and the Welcome Lead merge them, mark them "not the
+ * same person", or undo a merge; Tech Team sees the list.
  */
 
 export function DuplicatesPage() {
   const q = useDuplicates();
   const d = q.data;
-  const [tab, setTab] = useState<"review" | "dismissed">("review");
+  const [tab, setTab] = useState<"review" | "dismissed" | "merged">("review");
   const [merging, setMerging] = useState<DuplicateGroup | null>(null);
   const [dismissing, setDismissing] = useState<DuplicateGroup | null>(null);
 
@@ -49,6 +51,7 @@ export function DuplicatesPage() {
               [
                 ["review", `To review · ${d.groups.length}`],
                 ["dismissed", `Not the same person · ${d.dismissed.length}`],
+                ["merged", `Merged · ${d.merges.filter((m) => !m.undoneAt).length}`],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -68,7 +71,7 @@ export function DuplicatesPage() {
           </div>
 
           {!d.can.merge ? (
-            <p className="text-sm text-muted">You can see possible duplicates. Tech Admin, Church Admin and Integration Admin merge them.</p>
+            <p className="text-sm text-muted">You can see possible duplicates. Tech Admin, Church Admin, Integration Admin and the Welcome Lead merge them.</p>
           ) : null}
 
           {tab === "review" ? (
@@ -81,6 +84,18 @@ export function DuplicatesPage() {
             ) : (
               <EmptyState icon={<Users className="size-6" />} title="No duplicates to review">
                 Every guest has their own phone and email. New matches show here when someone fills in the form again.
+              </EmptyState>
+            )
+          ) : tab === "merged" ? (
+            d.merges.length ? (
+              <div className="space-y-3">
+                {d.merges.map((m) => (
+                  <MergeRow key={m.id} m={m} canMerge={d.can.merge} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState icon={<History className="size-6" />} title="No merges yet">
+                Every merge is listed here, and can be undone.
               </EmptyState>
             )
           ) : d.dismissed.length ? (
@@ -156,6 +171,61 @@ function GroupCard({ g, canMerge, onMerge, onDismiss }: { g: DuplicateGroup; can
             Review and merge
           </Button>
         </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function MergeRow({ m, canMerge }: { m: MergeHistory; canMerge: boolean }) {
+  const unmerge = useUnmerge();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const names = m.merged.map((x) => `${x.name} (#${x.connectId})`).join(" and ");
+  const undo = async () => {
+    const ok = await confirm({
+      title: `Undo the merge into ${m.keptName}?`,
+      body: (
+        <>
+          {names} will be separate records again, each with their own visits, follow-up notes and journey. Notes saved on {m.keptName} since the merge stay with {m.keptName}.
+        </>
+      ),
+      confirmLabel: "Undo merge",
+      destructive: false,
+    });
+    if (!ok) return;
+    unmerge.mutate(m.id, {
+      onSuccess: (r) =>
+        toast.show(r.journeyKept ? `Merge undone. ${m.keptName} keeps the follow-up saved since the merge.` : `Merge undone: ${m.merged.length + 1} separate records again`),
+      onError: (e) => toast.show(e instanceof ApiError ? e.message : "That didn't work. Try again.", { tone: "crit" }),
+    });
+  };
+  return (
+    <Card className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3", m.undoneAt && "opacity-70")}>
+      <div className="min-w-0 flex-1">
+        <p className="font-bold text-ink">
+          {m.merged.map((x) => x.name).join(", ")} <span className="font-semibold text-muted">into</span> {m.keptName}{" "}
+          <span className="font-semibold text-muted">#{m.keptId}</span>
+        </p>
+        <p className="mt-1 text-xs text-muted">
+          Merged by {m.by ?? "someone"} · {formatWhen(m.at)}
+          {m.undoneAt ? ` · undone by ${m.undoneBy ?? "someone"} · ${formatWhen(m.undoneAt)}` : ""}
+        </p>
+        {m.blocked ? <p className="mt-1 text-xs font-semibold text-warn">{m.blocked}</p> : null}
+      </div>
+      {m.undoneAt ? (
+        <Chip tone="neutral">Undone</Chip>
+      ) : canMerge ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<Undo2 className="size-4" />}
+          loading={unmerge.isPending}
+          disabled={!!m.blocked}
+          disabledReason={m.blocked ?? undefined}
+          onClick={() => void undo()}
+        >
+          Undo merge
+        </Button>
       ) : null}
     </Card>
   );

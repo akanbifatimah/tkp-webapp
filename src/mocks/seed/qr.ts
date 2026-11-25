@@ -84,8 +84,8 @@ export function seedQr(now = Date.now()) {
       destination: "event",
       targetId: "svc-5",
       activeFrom: "2026-12-20T14:00:00.000Z",
-      // Ends the night before the last day, so QR-8 warns.
-      expiresAt: "2027-01-09T04:00:00.000Z",
+      // Runs to the morning after the last night of the event.
+      expiresAt: "2027-01-10T12:00:00.000Z",
       state: "live",
       caption: "Scan for the full programme",
       createdAt: ago(6, now),

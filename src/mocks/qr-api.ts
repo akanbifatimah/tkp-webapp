@@ -10,7 +10,6 @@ import {
   type QrListResponse,
   type QrResolve,
   type QrStatus,
-  type QrWarning,
   PRINT_LAYOUTS,
 } from "@/features/welcome/qr-types";
 import { can, type Permission } from "@/lib/permissions";
@@ -98,48 +97,33 @@ function nextWeekly(s: ServiceRecord, from: number): { start: number; end: numbe
   return null;
 }
 
-type Window = Pick<QrRecord, "id" | "destination" | "targetId" | "serviceId" | "activeFrom" | "expiresAt">;
+type Window = Pick<QrRecord, "destination" | "targetId" | "serviceId" | "activeFrom" | "expiresAt">;
 
-export function warningsFor(c: Window, now: Date): QrWarning[] {
-  const out: QrWarning[] = [];
+/**
+ * QR-8, as TKP decided (2026-11-25): an error that blocks saving, never a
+ * warning. A code linked to a service (or an event code) must keep working
+ * until that service or event is over. Two codes for the same place are
+ * normal and are not flagged.
+ */
+export function expiryProblem(c: Window, now: Date): string | null {
   const t = now.getTime();
   const from = c.activeFrom ? Date.parse(c.activeFrom) : t;
   const until = c.expiresAt ? Date.parse(c.expiresAt) : Infinity;
-  if (until <= t) return out;
-
-  // Another live code for the same place, at overlapping times (warn, do not block).
-  for (const o of db.qrCodes) {
-    if (o.id === c.id || o.destination !== c.destination || (o.targetId ?? null) !== (c.targetId ?? null)) continue;
-    const st = statusOf(o, now);
-    if (st !== "active" && st !== "scheduled") continue;
-    const oFrom = o.activeFrom ? Date.parse(o.activeFrom) : t;
-    const oUntil = o.expiresAt ? Date.parse(o.expiresAt) : Infinity;
-    if (from < oUntil && oFrom < until)
-      out.push({ kind: "overlap", otherId: o.id, otherName: o.name, message: `“${o.name}” also opens ${destinationOf(o).label} at the same time.` });
-  }
-
-  // The code stops before the service it is for (an event's own dates count).
+  if (until === Infinity || until <= t) return null;
   const svc = findService(c.serviceId ?? (c.destination === "event" ? c.targetId : null));
-  if (svc && until !== Infinity) {
-    const start = Math.max(from, t);
-    if (svc.kind === "weekly") {
-      const next = nextWeekly(svc, start);
-      if (next && until < next.end)
-        out.push({
-          kind: "expires_before_service",
-          serviceId: svc.id,
-          message:
-            until > next.start
-              ? `Stops working during ${svc.name} (${formatWhen(new Date(next.start))}).`
-              : `Stops working before the next ${svc.name} (${formatWhen(new Date(next.start))}).`,
-        });
-    } else if (svc.startsOn && svc.endsOn) {
-      const end = Date.parse(fromChurchLocal(`${svc.endsOn}T23:59`));
-      if (end > start && until < end)
-        out.push({ kind: "expires_before_service", serviceId: svc.id, message: `Stops working before ${svc.name} ends (${svc.endsOn === svc.startsOn ? "on" : "last day"} ${formatWhen(new Date(end)).split(" · ")[0]}).` });
-    }
+  if (!svc) return null;
+  const start = Math.max(from, t);
+  if (svc.kind === "weekly") {
+    const next = nextWeekly(svc, start);
+    if (next && until < next.end)
+      return until > next.start
+        ? `It would stop during ${svc.name} (${formatWhen(new Date(next.start))}). Move the expiry after the service, or choose no particular service.`
+        : `It would stop before the next ${svc.name} (${formatWhen(new Date(next.start))}). Move the expiry after that service, or choose no particular service.`;
+  } else if (svc.startsOn && svc.endsOn) {
+    const end = Date.parse(fromChurchLocal(`${svc.endsOn}T23:59`));
+    if (end > start && until < end) return `It would stop before ${svc.name} ends (${formatWhen(new Date(end))}). Move the expiry after that.`;
   }
-  return out;
+  return null;
 }
 
 /* ================================================================== read */
@@ -186,7 +170,6 @@ export function toCode(c: QrRecord, now = new Date()): QrCode {
     updatedBy: nameOf(c.updatedById),
     rowVer: c.rowVer,
     scans: scanSummary(c.id, now),
-    warnings: status === "active" || status === "scheduled" ? warningsFor(c, now) : [],
   };
 }
 
@@ -254,7 +237,7 @@ const DEFAULT_CAPTION: Record<DestinationType, string> = {
 
 type Clean = Omit<QrInput, "draft" | "legacyUrl"> & { legacyUrl: string | null };
 
-function validate(input: Partial<QrInput>, self: QrRecord | null, creating: boolean): Result<Clean> {
+function validate(input: Partial<QrInput>, self: QrRecord | null, creating: boolean, now = new Date()): Result<Clean> {
   const fields: Record<string, string[]> = {};
   const name = String(input.name ?? "").trim().replace(/\s+/g, " ");
   if (name.length < 2) fields.name = ["Give the code a name"];
@@ -281,6 +264,10 @@ function validate(input: Partial<QrInput>, self: QrRecord | null, creating: bool
   if (expiresAt !== null && !isInstant(expiresAt)) fields.expiresAt = ["Enter a valid date and time"];
   if (!fields.activeFrom && !fields.expiresAt && activeFrom && expiresAt && Date.parse(expiresAt) <= Date.parse(activeFrom))
     fields.expiresAt = ["The expiry must be after the start"];
+  if (!fields.activeFrom && !fields.expiresAt && destination) {
+    const problem = expiryProblem({ destination, targetId, serviceId, activeFrom, expiresAt }, now);
+    if (problem) fields.expiresAt = [problem];
+  }
 
   const note = String(input.note ?? "").trim();
   if (note.length > 500) fields.note = ["Keep the note under 500 characters"];
@@ -308,23 +295,22 @@ function validate(input: Partial<QrInput>, self: QrRecord | null, creating: bool
   return ok({ name, destination: destination!, targetId, serviceId, activeFrom, expiresAt, note, caption, legacyUrl });
 }
 
-/** QR-8 for the form, before saving: the warnings this code would get. */
-export function checkQr(u: StaffRecord, input: Partial<QrInput> & { id?: string }, now = new Date()): Result<{ warnings: QrWarning[] }> {
+/** The form checks as people type, so a problem shows (and the save stays off) before they press Save. */
+export function checkQr(u: StaffRecord, input: Partial<QrInput> & { id?: string }, now = new Date()): Result<{ fields: Record<string, string> }> {
   if (!allowed(u, "qr.manage")) return no(403, "FORBIDDEN", FORBIDDEN);
   const destination = DESTINATIONS.includes(input.destination as DestinationType) ? (input.destination as DestinationType) : "guest_form";
-  return ok({
-    warnings: warningsFor(
-      {
-        id: input.id ?? "",
-        destination,
-        targetId: NEEDS_TARGET.includes(destination) ? (input.targetId ?? null) : null,
-        serviceId: input.serviceId ?? null,
-        activeFrom: isInstant(input.activeFrom) ? input.activeFrom : null,
-        expiresAt: isInstant(input.expiresAt) ? input.expiresAt : null,
-      },
-      now,
-    ),
-  });
+  const problem = expiryProblem(
+    {
+      destination,
+      targetId: NEEDS_TARGET.includes(destination) ? (input.targetId ?? null) : null,
+      serviceId: input.serviceId ?? null,
+      activeFrom: isInstant(input.activeFrom) ? input.activeFrom : null,
+      expiresAt: isInstant(input.expiresAt) ? input.expiresAt : null,
+    },
+    now,
+  );
+  const fields: Record<string, string> = problem ? { expiresAt: problem } : {};
+  return ok({ fields });
 }
 
 /* ================================================================ change */
@@ -347,7 +333,7 @@ const touch = (c: QrRecord, u: StaffRecord) => {
 
 export function createQr(u: StaffRecord, input: Partial<QrInput>, now = new Date()): Result<{ code: QrCode }> {
   if (!allowed(u, "qr.manage")) return no(403, "FORBIDDEN", FORBIDDEN);
-  const v = validate(input, null, true);
+  const v = validate(input, null, true, now);
   if (!v.ok) return v;
   const draft = !!input.draft && !v.body.legacyUrl;
   const id = `qr-${Math.max(0, ...db.qrCodes.map((c) => Number(c.id.slice(3)) || 0)) + 1}`;
@@ -385,7 +371,7 @@ export function updateQr(u: StaffRecord, id: string, input: Partial<QrInput> & {
   const c = findCode(id);
   if (!c) return no(404, "NOT_FOUND", "That QR code no longer exists.");
   if (input.rowVer !== c.rowVer) return no(409, "CONFLICT", `Someone else changed ${c.name} while you were editing. Reopen it to see their changes.`);
-  const v = validate(input, c, false);
+  const v = validate(input, c, false, now);
   if (!v.ok) return v;
   const next = { ...v.body, activeFrom: v.body.activeFrom ?? (c.state === "draft" ? null : c.activeFrom ?? now.toISOString()) };
   const before: Record<string, unknown> = {};
@@ -427,6 +413,10 @@ export function setQrDates(u: StaffRecord, id: string, input: Partial<QrDatesInp
   if (expiresAt !== null && !isInstant(expiresAt)) fields.expiresAt = ["Enter a valid date and time"];
   if (!Object.keys(fields).length && activeFrom && expiresAt && Date.parse(expiresAt) <= Date.parse(activeFrom))
     fields.expiresAt = ["The expiry must be after the start"];
+  if (!Object.keys(fields).length) {
+    const problem = expiryProblem({ destination: c.destination, targetId: c.targetId, serviceId: c.serviceId, activeFrom, expiresAt }, now);
+    if (problem) fields.expiresAt = [problem];
+  }
   if (Object.keys(fields).length) return no(422, "VALIDATION_FAILED", Object.values(fields)[0]![0]!, fields);
   const next = { activeFrom: activeFrom ?? (c.state === "draft" ? null : (c.activeFrom ?? now.toISOString())), expiresAt };
   if (next.activeFrom === c.activeFrom && next.expiresAt === c.expiresAt) return ok({ code: toCode(c, now) });

@@ -27,11 +27,6 @@ export const STATUS_LABEL: Record<QrStatus, string> = {
   expired: "Expired",
 };
 
-/** QR-8: warn, never block. */
-export type QrWarning =
-  | { kind: "overlap"; message: string; otherId: string; otherName: string }
-  | { kind: "expires_before_service"; message: string; serviceId: string };
-
 export type QrCode = {
   id: string;
   name: string;
@@ -61,7 +56,6 @@ export type QrCode = {
   updatedBy: string | null;
   rowVer: number;
   scans: { total: number; last30: number; lastAt: string | null };
-  warnings: QrWarning[];
 };
 
 export type QrTarget = { id: string; name: string; hint: string | null };

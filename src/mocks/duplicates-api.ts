@@ -7,7 +7,9 @@ import {
   type MatchReason,
   type MergeField,
   type MergeInput,
+  type MergeHistory,
   type MergeResult,
+  type UnmergeResult,
 } from "@/features/welcome/duplicate-types";
 import { can, type Permission } from "@/lib/permissions";
 import type { Result } from "./connect-api";
@@ -171,11 +173,22 @@ export function listDuplicates(u: StaffRecord): Result<DuplicatesResponse> {
       };
     })
     .sort((a, b) => b.at.localeCompare(a.at));
-  return ok({ groups, dismissed, can: { merge: allowed(u, "welcome.duplicates.merge") } });
+  const merges: MergeHistory[] = [...db.merges].reverse().map((m) => ({
+    id: m.id,
+    at: m.at,
+    by: nameOf(m.byId),
+    keptId: m.keepId,
+    keptName: fullName(m.keepBefore),
+    merged: m.others.map((r) => ({ connectId: r.connectId, name: fullName(r) })),
+    undoneAt: m.undoneAt,
+    undoneBy: nameOf(m.undoneById),
+    blocked: m.undoneAt ? null : unmergeBlocked(m),
+  }));
+  return ok({ groups, dismissed, merges, can: { merge: allowed(u, "welcome.duplicates.merge") } });
 }
 
 export function mergeDuplicates(u: StaffRecord, b: Partial<MergeInput>): Result<MergeResult> {
-  if (!allowed(u, "welcome.duplicates.merge")) return no(403, "FORBIDDEN", "Only Tech Admin, Church Admin and Integration Admin can merge records.");
+  if (!allowed(u, "welcome.duplicates.merge")) return no(403, "FORBIDDEN", "Only Tech Admin, Church Admin, Integration Admin and the Welcome Lead can merge records.");
   const keepId = Number(b.keepId);
   const mergeIds = [...new Set((b.mergeIds ?? []).map(Number))].filter((id) => id !== keepId);
   if (!keepId || !mergeIds.length) return no(422, "VALIDATION_FAILED", "Choose the record to keep and at least one to merge into it.", { mergeIds: ["Choose at least one record to merge"] });
@@ -201,6 +214,14 @@ export function mergeDuplicates(u: StaffRecord, b: Partial<MergeInput>): Result<
   const keep = list[0]!;
   const others = list.slice(1);
   const before = list.map(toPerson);
+  // What undo needs: every record, and who owned each visit and note, as they are now.
+  const allIds = new Set(ids);
+  const snapshot = {
+    keepBefore: structuredClone(keep),
+    others: others.map((r) => structuredClone(r)),
+    entries: Object.fromEntries(db.entries.filter((e) => allIds.has(e.connectId)).map((e) => [e.id, { connectId: e.connectId, visitNumber: e.visitNumber }])),
+    logs: Object.fromEntries(db.connectLogs.filter((l) => allIds.has(l.connectId)).map((l) => [l.logId, { connectId: l.connectId, guest: l.guest }])),
+  };
 
   // The journey: copy the chosen one onto the record kept.
   const j = list.find((r) => r.connectId === journeyFrom)!;
@@ -260,11 +281,67 @@ export function mergeDuplicates(u: StaffRecord, b: Partial<MergeInput>): Result<
     before: { name: before[0]!.name, records: before.map((p) => ({ connectId: p.connectId, name: p.name, ...p.fields, visits: p.visits, journey: p.journey.status, phase: p.journey.phase })) },
     after: { name, kept: keep.connectId, merged: mergeIds, journeyFrom, ...chosen, visits: dates.length },
   });
-  return ok({ kept: toPerson(keep), merged: mergeIds });
+  const mergeId = crypto.randomUUID();
+  db.merges.push({ id: mergeId, at, byId: u.id, keepId: keep.connectId, keepRowVerAfter: keep.rowVer, undoneAt: null, undoneById: null, ...snapshot });
+  return ok({ mergeId, kept: toPerson(keep), merged: mergeIds });
+}
+
+const fullName = (r: ConnectRecord) => `${r.entry.firstName ?? ""} ${r.entry.lastName ?? ""}`.trim();
+
+/** Undo is refused only when the kept record has itself been merged away since. */
+function unmergeBlocked(m: (typeof db.merges)[number]): string | null {
+  if (!db.connect.some((r) => r.connectId === m.keepId)) return "The kept record was merged into another one since. Undo that merge first.";
+  if (m.others.some((o) => !db.mergedRecords.some((r) => r.connectId === o.connectId))) return "One of the merged records is back already.";
+  return null;
+}
+
+/**
+ * Undo a merge (TKP asked for it, 2026-11-25). Every record comes back with its
+ * own visits, notes and journey. Notes saved on the kept record after the merge
+ * stay with it, and so does its journey if follow-up was saved since.
+ */
+export function unmergeDuplicates(u: StaffRecord, mergeId: string): Result<UnmergeResult> {
+  if (!allowed(u, "welcome.duplicates.merge")) return no(403, "FORBIDDEN", "Only Tech Admin, Church Admin, Integration Admin and the Welcome Lead can undo a merge.");
+  const m = db.merges.find((x) => x.id === mergeId);
+  if (!m) return no(404, "NOT_FOUND", "That merge doesn't exist.");
+  if (m.undoneAt) return no(409, "ALREADY_UNDONE", "This merge has already been undone.");
+  const blocked = unmergeBlocked(m);
+  if (blocked) return no(409, "MERGED_AGAIN", blocked);
+
+  const keep = db.connect.find((r) => r.connectId === m.keepId)!;
+  const journeyKept = keep.rowVer !== m.keepRowVerAfter;
+  const before = toPerson(keep);
+  if (journeyKept) {
+    // Follow-up was saved since: keep the journey as it is now; give back the details only.
+    keep.entry = structuredClone(m.keepBefore.entry);
+    keep.legacyNotes = structuredClone(m.keepBefore.legacyNotes);
+  } else {
+    Object.assign(keep, structuredClone(m.keepBefore));
+  }
+  keep.rowVer = Math.max(keep.rowVer, m.keepRowVerAfter) + 1;
+  for (const o of m.others) {
+    db.mergedRecords.splice(db.mergedRecords.findIndex((r) => r.connectId === o.connectId), 1);
+    db.connect.push({ ...structuredClone(o), rowVer: o.rowVer + 1 });
+  }
+  for (const e of db.entries) {
+    const was = m.entries[e.id];
+    if (was) Object.assign(e, was);
+  }
+  for (const l of db.connectLogs) {
+    const was = m.logs[l.logId];
+    if (was) Object.assign(l, was);
+  }
+  m.undoneAt = new Date().toISOString();
+  m.undoneById = u.id;
+  audit(u.id, "welcome.duplicates.unmerge", String(keep.connectId), {
+    before: { name: before.name, kept: keep.connectId, visits: before.visits },
+    after: { name: fullName(keep), records: [keep, ...m.others].map((r) => ({ connectId: r.connectId, name: fullName(r) })), journeyKept },
+  });
+  return ok({ restored: m.others.map((o) => o.connectId), journeyKept });
 }
 
 export function dismissDuplicates(u: StaffRecord, b: { ids?: number[]; note?: string | null }): Result<{ dismissed: string[] }> {
-  if (!allowed(u, "welcome.duplicates.merge")) return no(403, "FORBIDDEN", "Only Tech Admin, Church Admin and Integration Admin can decide on duplicates.");
+  if (!allowed(u, "welcome.duplicates.merge")) return no(403, "FORBIDDEN", "Only Tech Admin, Church Admin, Integration Admin and the Welcome Lead can decide on duplicates.");
   const ids = [...new Set((b.ids ?? []).map(Number))];
   if (ids.length < 2 || ids.some((id) => !db.connect.some((r) => r.connectId === id)))
     return no(422, "VALIDATION_FAILED", "Choose two or more records that still exist.", { ids: ["Choose two or more records"] });
@@ -290,7 +367,7 @@ export function dismissDuplicates(u: StaffRecord, b: { ids?: number[]; note?: st
 }
 
 export function restoreDuplicate(u: StaffRecord, key: string): Result<{ restored: true }> {
-  if (!allowed(u, "welcome.duplicates.merge")) return no(403, "FORBIDDEN", "Only Tech Admin, Church Admin and Integration Admin can decide on duplicates.");
+  if (!allowed(u, "welcome.duplicates.merge")) return no(403, "FORBIDDEN", "Only Tech Admin, Church Admin, Integration Admin and the Welcome Lead can decide on duplicates.");
   const d = db.duplicateDismissals.find((x) => x.key === key);
   if (!d) return no(404, "NOT_FOUND", "That pair is already back in the review list.");
   db.duplicateDismissals = db.duplicateDismissals.filter((x) => x.key !== key);

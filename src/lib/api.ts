@@ -15,9 +15,11 @@ import type {
 } from "@/features/connect/types";
 import type { FeatureCollection, Geometry } from "geojson";
 import type { CellMapResponse, CellName, Service, ServiceInput, ServicesResponse, SetZipResponse } from "@/features/admin/config-types";
-import type { DuplicatesResponse, MergeInput, MergeResult } from "@/features/welcome/duplicate-types";
+import type { DuplicatesResponse, MergeInput, MergeResult, UnmergeResult } from "@/features/welcome/duplicate-types";
+import type { ImportJob, ImportKind, ImportListResponse, ImportPatch, ImportSummary } from "@/features/welcome/import-types";
 import type { LcmResponse } from "@/features/welcome/lcm-types";
-import type { PrintLayout, QrCode, QrDatesInput, QrDetail, QrInput, QrListResponse, QrResolve, QrWarning } from "@/features/welcome/qr-types";
+import type { Period, Recipient, ReportData, ReportId, ReportRun, ReportsResponse, Schedule, ScheduleInput, SchedulesResponse, ShareInput } from "@/features/reports/report-types";
+import type { PrintLayout, QrCode, QrDatesInput, QrDetail, QrInput, QrListResponse, QrResolve } from "@/features/welcome/qr-types";
 import type { GuestRecord, GuestSearch, GuestSearchResponse, OverviewResponse, Scope } from "@/features/welcome/types";
 import type {
   AdminSettings,
@@ -113,7 +115,9 @@ export async function parseError(res: Response): Promise<ApiError> {
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  // A file upload goes as multipart; the browser sets the boundary.
+  const form = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  if (opts.body !== undefined && !form) headers["Content-Type"] = "application/json";
   const token = session.get();
   if (token) headers.Authorization = `Bearer ${token}`;
   if (opts.clientRequestId) headers["Idempotency-Key"] = opts.clientRequestId;
@@ -123,7 +127,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     res = await fetch(buildUrl(path, opts.query), {
       method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
       headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: form ? (opts.body as FormData) : opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: opts.signal,
       credentials: "include",
     });
@@ -221,14 +225,43 @@ export const api = {
       request<{ code: QrCode }>(`/welcome/qr-codes/${id}/${verb}`, { method: "POST", body: { rowVer } }),
     remove: (id: string) => request<{ deleted: true }>(`/welcome/qr-codes/${id}`, { method: "DELETE" }),
     check: (body: Partial<QrInput> & { id?: string }, signal?: AbortSignal) =>
-      request<{ warnings: QrWarning[] }>("/welcome/qr-codes/check", { body, signal }),
+      request<{ fields: Record<string, string> }>("/welcome/qr-codes/check", { body, signal }),
     logPrint: (ids: string[], layout: PrintLayout, copies: number) => request<{ logged: true }>("/welcome/qr-codes/print", { body: { ids, layout, copies } }),
     /** Mock mode only: what the short address would do now. */
     resolve: (slug: string) => request<QrResolve>(`/public/qr/${slug}`),
   },
+  reports: {
+    list: (signal?: AbortSignal) => request<ReportsResponse>("/reports", { signal }),
+    get: (id: ReportId, q: { period?: Period; type?: string }, signal?: AbortSignal) => request<ReportData>(`/reports/${id}`, { query: q, signal }),
+    logExport: (id: ReportId, b: { format: "pdf" | "csv"; period?: Period; type?: string | null }) => request<{ logged: true }>(`/reports/${id}/export`, { body: b }),
+    recipients: (id: ReportId, signal?: AbortSignal) => request<{ items: Recipient[] }>(`/reports/${id}/recipients`, { signal }),
+    share: (id: ReportId, b: ShareInput) => request<ReportRun>(`/reports/${id}/share`, { body: b }),
+    schedules: (signal?: AbortSignal) => request<SchedulesResponse>("/reports/schedules", { signal }),
+    createSchedule: (b: ScheduleInput) => request<Schedule>("/reports/schedules", { body: b }),
+    updateSchedule: (id: string, b: ScheduleInput & { rowVer: number }) => request<Schedule>(`/reports/schedules/${id}`, { method: "PUT", body: b }),
+    setActive: (id: string, active: boolean, rowVer: number) => request<Schedule>(`/reports/schedules/${id}/${active ? "resume" : "pause"}`, { body: { rowVer } }),
+    runNow: (id: string) => request<ReportRun>(`/reports/schedules/${id}/run`, { method: "POST" }),
+    deleteSchedule: (id: string) => request<{ deleted: true }>(`/reports/schedules/${id}`, { method: "DELETE" }),
+  },
+  imports: {
+    list: (signal?: AbortSignal) => request<ImportListResponse>("/welcome/imports", { signal }),
+    get: (id: string, signal?: AbortSignal) => request<ImportJob>(`/welcome/imports/${id}`, { signal }),
+    upload: (kind: ImportKind, file: File) => {
+      const body = new FormData();
+      body.append("kind", kind);
+      body.append("file", file);
+      return request<ImportJob>("/welcome/imports", { body });
+    },
+    patch: (id: string, body: ImportPatch) => request<ImportJob>(`/welcome/imports/${id}`, { method: "PATCH", body }),
+    commit: (id: string, mode: "add" | "update", idempotencyKey: string) =>
+      request<ImportSummary>(`/welcome/imports/${id}/commit`, { body: { mode, idempotencyKey }, clientRequestId: idempotencyKey }),
+    undo: (id: string, force = false) => request<ImportSummary>(`/welcome/imports/${id}/undo`, { body: { force } }),
+    discard: (id: string) => request<{ discarded: true }>(`/welcome/imports/${id}`, { method: "DELETE" }),
+  },
   duplicates: {
     list: (signal?: AbortSignal) => request<DuplicatesResponse>("/welcome/duplicates", { signal }),
     merge: (body: MergeInput) => request<MergeResult>("/welcome/duplicates/merge", { body }),
+    unmerge: (mergeId: string) => request<UnmergeResult>(`/welcome/duplicates/merges/${mergeId}/undo`, { method: "POST" }),
     dismiss: (ids: number[], note: string | null) => request<{ dismissed: string[] }>("/welcome/duplicates/dismiss", { body: { ids, note } }),
     restore: (key: string) => request<{ restored: true }>(`/welcome/duplicates/dismissed/${key}`, { method: "DELETE" }),
   },

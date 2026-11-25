@@ -24,4 +24,5 @@ function useDupMutation<V, R>(fn: (v: V) => Promise<R>) {
 
 export const useMergeDuplicates = () => useDupMutation((v: MergeInput) => api.duplicates.merge(v));
 export const useDismissDuplicates = () => useDupMutation((v: { ids: number[]; note: string | null }) => api.duplicates.dismiss(v.ids, v.note));
+export const useUnmerge = () => useDupMutation((mergeId: string) => api.duplicates.unmerge(mergeId));
 export const useRestoreDuplicate = () => useDupMutation((key: string) => api.duplicates.restore(key));

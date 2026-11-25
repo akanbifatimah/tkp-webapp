@@ -64,9 +64,24 @@ export type DismissedPair = {
   note: string | null;
 };
 
+/** A merge, newest first. Undo puts every record back as it was (TKP, 2026-11-25). */
+export type MergeHistory = {
+  id: string;
+  at: string;
+  by: string | null;
+  keptId: number;
+  keptName: string;
+  merged: { connectId: number; name: string }[];
+  undoneAt: string | null;
+  undoneBy: string | null;
+  /** Why undo is not possible now, e.g. the kept record was merged again since. */
+  blocked: string | null;
+};
+
 export type DuplicatesResponse = {
   groups: DuplicateGroup[];
   dismissed: DismissedPair[];
+  merges: MergeHistory[];
   can: { merge: boolean };
 };
 
@@ -81,4 +96,10 @@ export type MergeInput = {
   rowVers: Record<string, number>;
 };
 
-export type MergeResult = { kept: DuplicatePerson; merged: number[] };
+export type MergeResult = { mergeId: string; kept: DuplicatePerson; merged: number[] };
+
+export type UnmergeResult = {
+  restored: number[];
+  /** True when follow-up was saved on the kept record after the merge: it keeps its current journey. */
+  journeyKept: boolean;
+};

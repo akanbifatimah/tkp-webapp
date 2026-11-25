@@ -2,6 +2,8 @@ import type { LogRow } from "@/features/connect/types";
 import { seedAttendance, type AttendanceRow } from "./seed/attendance";
 import { seedAudit } from "./seed/audit";
 import { addDuplicates } from "./seed/duplicates";
+import type { ImportRecord } from "./import-api";
+import { seedReports, type RunRecord, type ScheduleRecord } from "./seed/reports";
 import type { CellName } from "@/features/admin/config-types";
 import { CELL_ZIPS, seedConnect, type ConnectRecord, type WelcomeEntry } from "./seed/guests";
 import { seedQr, type QrRecord, type QrScanRow } from "./seed/qr";
@@ -21,6 +23,25 @@ export type AuditRow = {
   meta?: { before?: Record<string, unknown>; after?: Record<string, unknown> };
 };
 
+/** A merge and the snapshot that undoes it (W-14 unmerge). */
+export type MergeRecord = {
+  id: string;
+  at: string;
+  byId: string;
+  keepId: number;
+  /** The kept record as it was, and its rowVer right after the merge. */
+  keepBefore: ConnectRecord;
+  keepRowVerAfter: number;
+  /** The merged records as they were. */
+  others: ConnectRecord[];
+  /** Entry id → its owner and visit number before the merge (the kept record's too). */
+  entries: Record<number, { connectId: number; visitNumber: number }>;
+  /** Log id → its owner and guest name before the merge. */
+  logs: Record<number, { connectId: number; guest: string }>;
+  undoneAt: string | null;
+  undoneById: string | null;
+};
+
 /** Settings the Tech Admin edits (PRD SA-1). */
 export type SettingsRecord = {
   /** "Forgot password?" panel (UI-S1). */
@@ -38,6 +59,7 @@ export type SettingsRecord = {
 // The five fictional duplicate cases go in before anything reads the guests.
 const seeded = addDuplicates(seedConnect());
 const qr = seedQr();
+const reports = seedReports();
 const staff = STAFF.map((s) => ({ ...s, roles: [...s.roles] })) as StaffRecord[];
 
 export const db = {
@@ -84,6 +106,13 @@ export const db = {
   mergedRecords: [] as (ConnectRecord & { mergedInto: number; mergedAt: string; mergedById: string })[],
   /** Pairs staff marked "not the same person": never suggested again. Key = the two connectIds, sorted, "a-b". */
   duplicateDismissals: [] as { key: string; ids: [number, number]; byId: string; at: string; note: string | null }[],
+  /** Every merge, with what it changed, so it can be undone. */
+  merges: [] as MergeRecord[],
+  /** Import batches (W-16): staged drafts, committed and undone imports. */
+  imports: [] as ImportRecord[],
+  /** Scheduled report sharing (PL-4, W-9) and every share or scheduled send. */
+  reportSchedules: reports.schedules as ScheduleRecord[],
+  reportRuns: reports.runs as RunRecord[],
 };
 
 /** Every sign-in, search, guest view, assignment, save and admin change is audited (FI-09, PRD F-5). */

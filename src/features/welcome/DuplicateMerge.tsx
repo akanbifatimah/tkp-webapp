@@ -9,13 +9,13 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { serviceDateShort } from "@/lib/time";
 import { JourneyChip, ReasonChips, callers } from "./duplicate-parts";
-import { useMergeDuplicates } from "./duplicate-queries";
+import { useMergeDuplicates, useUnmerge } from "./duplicate-queries";
 import { MERGE_FIELDS, MERGE_FIELD_LABEL, type DuplicateGroup, type MergeField } from "./duplicate-types";
 
 /**
  * Review and merge (PRD W-14). Staff choose the record to keep, the value to
  * keep wherever the records differ, and whose follow-up journey carries on.
- * Merging cannot be undone from the screen, so it asks first.
+ * Merging changes many things at once, so it asks first; the Merged tab undoes it.
  */
 
 /** Two values are the same when they only differ in format: phones by digits, the rest ignoring case. */
@@ -46,6 +46,7 @@ function MergeForm({ group, onClose }: { group: DuplicateGroup; onClose: () => v
   const [journeyFrom, setJourneyFrom] = useState(group.suggestedJourney);
   const [picked, setPicked] = useState<Partial<Record<MergeField, number>>>({});
   const merge = useMergeDuplicates();
+  const unmerge = useUnmerge();
   const confirm = useConfirm();
   const toast = useToast();
 
@@ -68,7 +69,7 @@ function MergeForm({ group, onClose }: { group: DuplicateGroup; onClose: () => v
       body: (
         <>
           {othersText} will be merged into {finalName} (#{keepId}). All visits and follow-up notes move across, and{" "}
-          {others.length === 1 ? "the other follow-up journey closes" : "the other follow-up journeys close"}. This can't be undone from this screen.
+          {others.length === 1 ? "the other follow-up journey closes" : "the other follow-up journeys close"}. You can undo it later from the Merged tab.
         </>
       ),
       confirmLabel: `Merge ${people.length} records`,
@@ -85,9 +86,11 @@ function MergeForm({ group, onClose }: { group: DuplicateGroup; onClose: () => v
         rowVers: Object.fromEntries(people.map((p) => [String(p.connectId), p.rowVer])),
       },
       {
-        onSuccess: () => {
+        onSuccess: (r) => {
           onClose();
-          toast.show(`${people.length} records merged into ${finalName}`);
+          toast.show(`${people.length} records merged into ${finalName}`, {
+            undo: () => unmerge.mutate(r.mergeId, { onError: (e) => toast.show(e instanceof ApiError ? e.message : "The undo didn't go through.", { tone: "crit" }) }),
+          });
         },
         onError: (e) => {
           const msg = e instanceof ApiError ? e.message : "The merge didn't go through. Try again.";

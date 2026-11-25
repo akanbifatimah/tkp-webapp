@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DuplicateGroup } from "@/features/welcome/duplicate-types";
 import type { Result } from "./connect-api";
 import { db } from "./db";
-import { dismissDuplicates, listDuplicates, mergeDuplicates, normalPhone, restoreDuplicate } from "./duplicates-api";
+import { dismissDuplicates, listDuplicates, mergeDuplicates, normalPhone, restoreDuplicate, unmergeDuplicates } from "./duplicates-api";
 
 /** M7 step 3: duplicate review and merge (PRD W-14, A-1, 8.1). docs/API.md §10. */
 const user = (id: string) => db.staff.find((s) => s.id === id)!;
@@ -20,16 +20,16 @@ const groupOf = (name: string) => groups().groups.find((g) => g.people.some((p) 
 const rowVers = (g: DuplicateGroup) => Object.fromEntries(g.people.map((p) => [String(p.connectId), p.rowVer]));
 
 describe("duplicates: who may do what", () => {
-  it("the admins merge; the welcome lead and Tech Team only see; the welcome team has no access", () => {
+  it("the admins and the welcome lead merge; Tech Team only sees; the welcome team has no access", () => {
     expect(groups().can.merge).toBe(true);
-    for (const id of [WELCOME_LEAD, TECH_TEAM]) {
-      const r = listDuplicates(user(id));
-      expect(r.ok && r.body.can.merge).toBe(false);
-    }
+    const lead = listDuplicates(user(WELCOME_LEAD));
+    expect(lead.ok && lead.body.can.merge).toBe(true);
+    const tech = listDuplicates(user(TECH_TEAM));
+    expect(tech.ok && tech.body.can.merge).toBe(false);
     expect(code(listDuplicates(user(WELCOME_TEAM)))).toBe("FORBIDDEN");
     const g = groupOf("Marcus Adeleke")!;
-    expect(code(mergeDuplicates(user(WELCOME_LEAD), { keepId: g.people[0]!.connectId, mergeIds: [g.people[1]!.connectId], rowVers: rowVers(g) }))).toBe("FORBIDDEN");
-    expect(code(dismissDuplicates(user(WELCOME_LEAD), { ids: g.people.map((p) => p.connectId) }))).toBe("FORBIDDEN");
+    expect(code(mergeDuplicates(user(TECH_TEAM), { keepId: g.people[0]!.connectId, mergeIds: [g.people[1]!.connectId], rowVers: rowVers(g) }))).toBe("FORBIDDEN");
+    expect(code(dismissDuplicates(user(TECH_TEAM), { ids: g.people.map((p) => p.connectId) }))).toBe("FORBIDDEN");
   });
 });
 
@@ -155,5 +155,58 @@ describe("duplicates: merging", () => {
     const r = mergeDuplicates(user(CHURCH_ADMIN), { keepId: keep!.connectId, mergeIds: rest.map((p) => p.connectId), journeyFrom: g.suggestedJourney, rowVers: rowVers(g) });
     expect(r.ok && r.body.kept.visits).toBe(3);
     expect(groups().groups.map((x) => x.people[0]!.name)).toEqual(["Gabriel Osei"]);
+  });
+});
+
+describe("duplicates: undo a merge (TKP, 2026-11-25)", () => {
+  const mergeOf = (name: string) => groups().merges.find((m) => m.keptName === name && !m.undoneAt)!;
+
+  it("lists every merge, newest first, with who did it", () => {
+    const m = groups().merges;
+    expect(m.map((x) => x.keptName)).toEqual(["Anita Cole-Mensah", "Funmilayo Okoro", "Marcus Adeleke"]);
+    expect(m[0]).toMatchObject({ by: "Esther Coleman", undoneAt: null, blocked: null });
+    expect(m[0]!.merged).toHaveLength(2);
+  });
+
+  it("puts every record back with its own visits, notes and journey", () => {
+    const m = mergeOf("Anita Cole-Mensah");
+    const keep = db.merges.find((x) => x.id === m.id)!.keepBefore;
+    expect(code(unmergeDuplicates(user(TECH_TEAM), m.id))).toBe("FORBIDDEN");
+    const r = unmergeDuplicates(user(WELCOME_LEAD), m.id);
+    expect(r.ok && r.body).toEqual({ restored: m.merged.map((x) => x.connectId), journeyKept: false });
+    expect(db.audit[0]).toMatchObject({ action: "welcome.duplicates.unmerge", actorId: WELCOME_LEAD });
+    const g = groupOf("Anita Cole Mensah")!;
+    expect(g.people).toHaveLength(3);
+    expect(g.people.every((p) => p.visits === 1 && p.logs >= 1)).toBe(true);
+    const rec = db.connect.find((x) => x.connectId === m.keptId)!;
+    expect(rec.phase).toBe(keep.phase);
+    expect(rec.state.returned2ndVisit).toBe(keep.state.returned2ndVisit);
+    expect(db.entries.filter((e) => m.merged.some((x) => x.connectId === e.connectId)).every((e) => e.visitNumber === 1)).toBe(true);
+    expect(db.mergedRecords.some((x) => m.merged.some((y) => y.connectId === x.connectId))).toBe(false);
+    expect(code(unmergeDuplicates(user(CHURCH_ADMIN), m.id))).toBe("ALREADY_UNDONE");
+  });
+
+  it("keeps the current journey when follow-up was saved on the kept record since", () => {
+    const m = mergeOf("Marcus Adeleke");
+    const rec = db.connect.find((x) => x.connectId === m.keptId)!;
+    rec.phase = 3;
+    rec.rowVer++; // a follow-up save after the merge
+    const r = unmergeDuplicates(user(CHURCH_ADMIN), m.id);
+    expect(r.ok && r.body.journeyKept).toBe(true);
+    expect(rec.phase).toBe(3);
+    expect(groupOf("Marcus Adeleke")!.people).toHaveLength(2);
+  });
+
+  it("refuses when the kept record has been merged away since", () => {
+    const m = mergeOf("Funmilayo Okoro");
+    const i = db.connect.findIndex((x) => x.connectId === m.keptId);
+    const [rec] = db.connect.splice(i, 1);
+    try {
+      expect(groups().merges.find((x) => x.id === m.id)!.blocked).toMatch(/merged into another/);
+      expect(code(unmergeDuplicates(user(CHURCH_ADMIN), m.id))).toBe("MERGED_AGAIN");
+    } finally {
+      db.connect.splice(i, 0, rec!);
+    }
+    expect(code(unmergeDuplicates(user(CHURCH_ADMIN), "nope"))).toBe("NOT_FOUND");
   });
 });

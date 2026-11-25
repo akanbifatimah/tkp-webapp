@@ -235,7 +235,7 @@ export const AUDIT_CATEGORY: Record<AuditCategory, (action: string) => boolean> 
   connect: (a) => a.startsWith("connect."),
   users: (a) => a.startsWith("user."),
   settings: (a) => a.startsWith("settings."),
-  exports: (a) => a.endsWith(".export") || a === "welcome.qr.print",
+  exports: (a) => a.endsWith(".export") || a === "welcome.qr.print" || a === "reports.share" || a === "reports.schedule.run",
 };
 
 const nameOf = (id: string | null) => (id ? (db.staff.find((s) => s.id === id)?.fullName ?? null) : null);
@@ -266,6 +266,8 @@ function targetLabel(r: AuditRow): string | null {
     const name = db.qrCodes.find((c) => c.id === r.target)?.name ?? (r.meta?.before?.name as string | undefined) ?? (r.meta?.after?.name as string | undefined);
     return name ?? r.target;
   }
+  if (r.action.startsWith("reports.")) return (r.meta?.after?.name as string | undefined) ?? (r.meta?.before?.name as string | undefined) ?? r.target;
+  if (r.action.startsWith("welcome.import.")) return (r.meta?.after?.name as string | undefined) ?? (r.meta?.before?.name as string | undefined) ?? r.target;
   if (r.action.startsWith("welcome.duplicates.")) return (r.meta?.after?.name as string | undefined) ?? (r.meta?.before?.name as string | undefined) ?? r.target;
   if (r.action.startsWith("connect.") && /^\d+$/.test(r.target)) return `Connect #${r.target}`;
   return r.target;

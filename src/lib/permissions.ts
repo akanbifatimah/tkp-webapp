@@ -92,6 +92,10 @@ export const PERMISSIONS = [
   "qr.manage",
   "welcome.duplicates.view",
   "welcome.duplicates.merge",
+  "welcome.import",
+  "welcome.import.followups",
+  "reports.view",
+  "reports.share",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -111,8 +115,10 @@ const CONNECT_TABS: Permission[] = [
  */
 const QR_MANAGE: Permission[] = ["qr.view", "qr.print", "qr.manage"];
 const QR_PRINT: Permission[] = ["qr.view", "qr.print"];
-/** PRD W-14: the admins merge; the welcome lead and Tech Team see the list. */
+/** PRD W-14: the admins and the welcome lead merge (TKP, 2026-11-25); Tech Team sees the list. */
 const DUP_MERGE: Permission[] = ["welcome.duplicates.view", "welcome.duplicates.merge"];
+/** PRD PL-4, PL-5: the Reports hub. Everyone who sees LCM sees the hub; leadership and the admins share. */
+const REPORTS_SHARE: Permission[] = ["reports.view", "reports.share"];
 const LATER_ALL: Permission[] = ["grow.view", "care.view", "serve.view", "lead.view", "go.view", "transform.view"];
 
 /**
@@ -123,16 +129,16 @@ const LATER_ALL: Permission[] = ["grow.view", "care.view", "serve.view", "lead.v
 const EXPORT: Permission[] = ["welcome.export"];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  tech_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit", "admin.settings", "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE],
-  tech_team: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.audit", "qr.view", "welcome.duplicates.view"],
-  lead_pastor: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "qr.view"],
-  church_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE],
-  church_office_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view"],
+  tech_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit", "admin.settings", "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE],
+  tech_team: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.audit", "qr.view", "welcome.duplicates.view", "reports.view"],
+  lead_pastor: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "qr.view", ...REPORTS_SHARE],
+  church_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE],
+  church_office_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", "reports.view"],
   church_office: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view"],
   // PRD IL-5 / IL-6: the integration lead keeps the cell and ZIP map.
-  integration_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "config.cells", ...QR_MANAGE, ...DUP_MERGE],
+  integration_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "config.cells", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE],
   integration_team: ["welcome.overview.view", "welcome.lookup.view", ...CONNECT_TABS],
-  welcome_lead: [...WELCOME_ALL, ...EXPORT, "connect.journey.view", ...QR_PRINT, "welcome.duplicates.view"],
+  welcome_lead: [...WELCOME_ALL, ...EXPORT, "connect.journey.view", ...QR_PRINT, ...DUP_MERGE, "welcome.import", ...REPORTS_SHARE],
   welcome_team: ["welcome.overview.view", "welcome.lookup.view", "connect.journey.view", ...QR_PRINT],
   tkp_member: ["member.home", "belong.view", ...LATER_ALL],
   // PRD roles: their module keys arrive with Part 2.
@@ -221,12 +227,12 @@ export const ROLE_SUMMARY: Record<Role, string> = {
   tech_admin: "Everything, including users, audit log and settings. Saves logs for guests assigned to them.",
   tech_team: "Sees every module to support and test it. Reads the audit log. Cannot save or assign.",
   lead_pastor: "Sees Welcome and both Connect teams; assigns guests and saves logs for guests assigned to them.",
-  church_admin: "Church dashboard, Welcome and both Connect teams; assigns guests; keeps the services, cell map and QR codes; merges duplicate guests. Never saves logs.",
+  church_admin: "Church dashboard, Welcome and both Connect teams; assigns guests; keeps the services, cell map and QR codes; merges duplicate guests; imports past records. Never saves logs.",
   church_office_admin: "Leads the Church Office team: sees and assigns the team's guests.",
   church_office: "Church Office caller: works the guests assigned to them.",
-  integration_admin: "Leads the Integration Team: sees and assigns the team's guests; keeps the cell map and QR codes; merges duplicate guests.",
+  integration_admin: "Leads the Integration Team: sees and assigns the team's guests; keeps the cell map and QR codes; merges duplicate guests; imports past records.",
   integration_team: "Integration caller: works the guests assigned to them.",
-  welcome_lead: "Welcome overview, guest lookup and LCM Metrics; exports guest PDFs; prints QR codes; sees duplicate guests.",
+  welcome_lead: "Welcome overview, guest lookup and LCM Metrics; exports guest PDFs; prints QR codes; merges duplicate guests; imports past guest entries.",
   welcome_team: "Welcome overview and guest lookup; prints QR codes.",
   tkp_member: "Member home only. No staff areas.",
   registrar: "Owns courses, exams, results and students (Grow, coming in M8).",
@@ -268,4 +274,8 @@ export const PERMISSION_LABEL: Record<Permission, { area: string; label: string 
   "qr.manage": { area: "Welcome", label: "Create and change QR codes" },
   "welcome.duplicates.view": { area: "Welcome", label: "Duplicate guests" },
   "welcome.duplicates.merge": { area: "Welcome", label: "Merge duplicate guests" },
+  "welcome.import": { area: "Welcome", label: "Import past guest entries" },
+  "welcome.import.followups": { area: "Welcome", label: "Import follow-up tracker records" },
+  "reports.view": { area: "Reports", label: "Reports hub" },
+  "reports.share": { area: "Reports", label: "Share reports and schedule them" },
 };
