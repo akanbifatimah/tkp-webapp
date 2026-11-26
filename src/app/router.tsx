@@ -57,6 +57,11 @@ const CertificatesPage = lazy(() => import("@/features/grow/CertificatesPage").t
 const DropOffPage = lazy(() => import("@/features/grow/DropOffPage").then((m) => ({ default: m.DropOffPage })));
 const ForumPage = lazy(() => import("@/features/grow/ForumPage").then((m) => ({ default: m.ForumPage })));
 const ThreadPage = lazy(() => import("@/features/grow/ThreadPage").then((m) => ({ default: m.ThreadPage })));
+const PrayerWallPage = lazy(() => import("@/features/care/PrayerWallPage").then((m) => ({ default: m.PrayerWallPage })));
+const PrivateRequestsPage = lazy(() => import("@/features/care/PrivateRequestsPage").then((m) => ({ default: m.PrivateRequestsPage })));
+const ProjectsPage = lazy(() => import("@/features/serve/ProjectsPage").then((m) => ({ default: m.ProjectsPage })));
+const ProjectPage = lazy(() => import("@/features/serve/ProjectPage").then((m) => ({ default: m.ProjectPage })));
+const ProjectFormPage = lazy(() => import("@/features/serve/ProjectFormPage").then((m) => ({ default: m.ProjectFormPage })));
 const UiKitPage = lazy(() => import("@/features/dev/UiKitPage").then((m) => ({ default: m.UiKitPage })));
 
 const loading = <Skeleton className="mt-6 h-96 w-full rounded-3xl" />;
@@ -73,6 +78,30 @@ function AdminIndex() {
   const { has } = useAuth();
   const admin = visibleNav(has).find((g) => g.id === "admin");
   return admin ? <Navigate to={admin.to} replace /> : <AccessDenied />;
+}
+
+/** Care: staff with the Prayer Wall queue see it; members see what is coming. */
+function CareIndex() {
+  const { has } = useAuth();
+  return has("prayer.view") ? (
+    <Suspense fallback={loading}>
+      <PrayerWallPage />
+    </Suspense>
+  ) : (
+    <ModuleComing spec={COMING_LATER.care!} />
+  );
+}
+
+/** Serve: staff with Projects see them; members see what is coming. */
+function ServeIndex() {
+  const { has } = useAuth();
+  return has("projects.view") ? (
+    <Suspense fallback={loading}>
+      <ProjectsPage />
+    </Suspense>
+  ) : (
+    <ModuleComing spec={COMING_LATER.serve!} />
+  );
 }
 
 /** Grow: staff with the Learn admin see the dashboard; members see what is coming for learners. */
@@ -96,8 +125,6 @@ const page = (permission: Permission, element: React.ReactNode, kind: "connect" 
 const laterRoutes: RouteObject[] = (
   [
     ["belong", "belong.view"],
-    ["care", "care.view"],
-    ["serve", "serve.view"],
     ["lead", "lead.view"],
     ["go", "go.view"],
     ["transform", "transform.view"],
@@ -174,6 +201,22 @@ export const router = createBrowserRouter([
           { path: "journey/:connectId?", element: page("connect.journey.view", <JourneyPage />, "connect") },
           { path: "board", element: page("connect.phaseBoard.view", <PhaseBoardPage />, "connect") },
           { path: "metrics", element: page("connect.metrics.view", <MetricsPage />, "connect") },
+        ],
+      },
+      {
+        path: "serve",
+        children: [
+          { index: true, element: page("serve.view", <ServeIndex />) },
+          { path: "projects/new", element: page("projects.view", <ProjectFormPage />) },
+          { path: "projects/:id", element: page("projects.view", <ProjectPage />) },
+          { path: "projects/:id/edit", element: page("projects.view", <ProjectFormPage />) },
+        ],
+      },
+      {
+        path: "care",
+        children: [
+          { index: true, element: page("care.view", <CareIndex />) },
+          { path: "private", element: page("prayer.private", <PrivateRequestsPage />) },
         ],
       },
       {

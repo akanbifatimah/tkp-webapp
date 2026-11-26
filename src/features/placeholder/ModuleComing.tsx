@@ -60,8 +60,8 @@ const later = (title: string, features: string[]): ComingSpec => ({
 export const COMING_LATER: Record<string, ComingSpec> = {
   belong: later("Belong", ["Small groups and the opt-in member directory", "Cell groups and rosters"]),
   grow: later("Grow", ["Class catalogue and enrolment for members and External Students", "Lessons, exams and your certificates (member portal)"]),
-  care: later("Care", ["Prayer Wall moderation", "Care team overview"]),
-  serve: later("Serve", ["Projects, positions and applicant review", "Events and 168 Hours of Praise"]),
+  care: later("Care", ["The Prayer Wall: share a request and pray for others (member app)", "Care and support requests to the pastoral team"]),
+  serve: later("Serve", ["Browse projects and open positions, and contact the coordinator (member app)", "Post a project for the pastoral team to review"]),
   lead: later("Lead", ["Leadership dashboards with totals only"]),
   go: later("Go", ["Outreach and missions"]),
   transform: later("Transform", ["Long-term discipleship metrics"]),

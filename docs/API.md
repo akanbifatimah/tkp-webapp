@@ -2070,3 +2070,225 @@ New Believers has three conversations.
 - **Learner posting rules.** Can members post anonymously? Who can see prayer requests: the cohort, or only the pastors?
 - **Private messages.** Should "Private message" use email, SMS or in-app messages, and with what consent?
 - **Notifications.** Should a pastoral reply notify the person who asked?
+
+---
+
+## 18. Care: Prayer Wall moderation (M9 step 1)
+
+PRD 5.4 (PR-1 to PR-12), OS-1 and OS-2. There's no admin Figma for this; the request card follows the member Prayer Wall (Figma G4, `220:1441`), including its categories, "18 praying" and Pray.
+
+Screens:
+- Care › Prayer Wall: `/care`
+- Care › Private requests: `/care/private`
+
+The mock is `src/mocks/prayer-api.ts`, with its seed in `src/mocks/seed/prayer.ts` and its tests in `src/mocks/prayer-api.test.ts`.
+
+### Who (TKP, 2026-11-26)
+
+| Key | Who | Lets them |
+|---|---|---|
+| `prayer.view` | Tech Admin, Tech Team, Church Admin, Prayer Moderator | The moderation queue |
+| `prayer.moderate` | Tech Admin, Church Admin, Prayer Moderator | Approve, edit, remove, restore, notes, "Who posted?" |
+| `prayer.private` | **Prayer Moderator only** | Private requests to the prayer team |
+| `prayer.settings` | Tech Admin, Church Admin | Prayer Wall settings |
+
+- **Private requests are the one thing the Tech Admin doesn't see.** TKP chose to keep them to the prayer team.
+- **Demo moderators:** Folasade Ayeni and Tiwa Bakare, after the Figma's "Intercessory Prayer Secretaries".
+- **Members** keep `care.view`, which shows the learner side's "coming" page.
+
+### Request states
+
+`pending`, then `published`, `hidden` or `removed`:
+- **`pending`:** waiting for a moderator. Every new request starts here while the setting is **hold for review**, TKP's choice. A request that trips the care check starts here in either mode.
+- **`published`:** on the wall.
+- **`hidden`:** taken off the wall automatically after enough reports (PR-5), waiting for a moderator.
+- **`removed`:** taken down by a moderator, or because its retention period ended. It's kept for the purge days, then deleted for good (PR-11). It can be restored until then.
+
+### Staff routes
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `GET /care/prayer?filter=review\|published\|removed\|all&q=&category=` | `{ items, counts, week, settings, can }`. The `review` filter covers pending and hidden requests, those flagged by the care check first | |
+| `POST /care/prayer/{id}/approve` | `{ rowVer }`. Onto the wall. On a hidden request, its reports are dismissed and a note records how many | `prayer.approve` |
+| `PUT /care/prayer/{id}` | `{ text, category, reason, rowVer }`. A light edit (names, contact details). The original wording is kept in the record | `prayer.edit` (before and after) |
+| `POST /care/prayer/{id}/remove` | `{ reason, rowVer }`. Soft removal, kept for `purgeDays` | `prayer.remove` |
+| `POST /care/prayer/{id}/restore` | `{ rowVer }`. A removed request goes back on the wall | `prayer.restore` |
+| `POST /care/prayer/{id}/notes` | `{ text }`. Seen by moderators only | `prayer.note` |
+| `GET /care/prayer/{id}/poster` | Who posted (PR-7): `{ kind, name, email, device, posts, removed }`. For abuse handling only; **every look is logged** | `prayer.identity.view` |
+| `PUT /care/prayer/settings` | `{ mode: "hold" \| "publish", reportThreshold (1–20), distressWords (1–60), retentionDays (7–730), purgeDays (1–90), rowVer }` | `prayer.settings.update` (changed fields) |
+
+**Private requests (PR-3, OS-2):**
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `GET /care/prayer/private?status=` | Open requests by default. Requests flagged by the care check come first | |
+| `POST /care/prayer/private/{id}/prayed` | "I've prayed over this", once per team member. A new request becomes "Being prayed for" | `prayer.private.prayed` |
+| `PUT /care/prayer/private/{id}/status` | `{ status, rowVer, note }`. Status is `new`, `praying`, `follow_up` or `closed`; `follow_up` needs a note on what's needed | `prayer.private.status` |
+| `POST /care/prayer/private/{id}/notes` | `{ text }` | `prayer.private.note` |
+
+The audit log has a "Care" filter.
+
+### Public routes, for the portal and the member app (no sign-in)
+
+| Call | Rules |
+|---|---|
+| `GET /public/prayer?category=&page=` | Published requests only, newest first, 20 a page, cacheable (PR-1). Returns `{ id, name ("Anonymous" if they chose it), category, text, createdAt, prayed, answered }`. It never says who posted (PR-7) |
+| `POST /public/prayer` | `{ text (5–600), category, name, anonymous, private, contact, human, device }`. See the rules below |
+| `POST /public/prayer/{id}/prayed` | `{ device }`. One "Pray" per device or person; who prayed is never exposed (PR-6) |
+| `POST /public/prayer/{id}/report` | `{ device, reason }`. One report per device. At `reportThreshold` the request becomes `hidden` (PR-5), audited as `prayer.auto_hide` |
+
+**Rules for posting a request:**
+- **Human check:** required; `422 HUMAN_CHECK` without it. The real backend uses a CAPTCHA token.
+- **Rate limit:** 3 requests an hour per device; more is `429 TOO_MANY` (PR-2).
+- **Contact details are refused (PR-10):** phone numbers, emails, links and street addresses return 422 with a message saying what to take out.
+- **Care check (PR-9):** if the text matches a care-check word, the answer has `showCareResources: true`, so the app shows the care resources panel. The request is held for a person whatever the mode. Only the matched words are stored, nothing more.
+- **Private requests** (`private: true`) go to the prayer team and never appear on the wall.
+
+### Rules we added where the PRD is silent
+
+1. **The care check holds a request even in "publish at once" mode.** Someone who may be in distress should be read by a person before anything else happens.
+2. **Approving a hidden request dismisses its reports**, with a note recording how many.
+3. **Edits keep the original wording** and need a reason. Members' words are never lost.
+4. **Retention runs before every read** in the mock. The real backend runs it as a nightly job:
+   - a request on the wall longer than `retentionDays` is removed, with the reason "On the wall for N days";
+   - a removed request is deleted for good after `purgeDays`.
+5. **Default care-check words:** suicide, kill myself, end my life, no reason to live, hurt myself, self-harm, can't go on, abuse, unsafe at home. Admins change the list in Settings.
+
+### Mock data
+
+- 5 requests waiting for review, including one tripping the care check ("no reason to live").
+- 2 requests hidden by reports.
+- 16 requests on the wall, some marked answered.
+- 1 removed request.
+- 6 private requests, one tripping the care check ("unsafe at home").
+
+### TKP's answers (2026-11-26)
+
+- **Care resources panel:** phone numbers. Admins keep the list in Settings (`careResources: [{ label, phone }]`). A public post that trips the care check gets them back as `careResources`. The seeded numbers are placeholders until TKP gives its own: a fictional church line, and 988 (the US Suicide and Crisis Lifeline).
+- **Settings:** 3 reports, 180 days on the wall and 30 days before deletion are confirmed.
+- **Answered:** moderators can mark a request answered too, for accountability, with `PUT /care/prayer/{id}/answered { answered, rowVer }`. It records **who marked it and when** (`answeredBy`), audited as `prayer.answered` / `prayer.unanswered`. A poster's own mark (PR-8) shows as "The person who posted it".
+
+### Open questions
+
+- The church's own care numbers and who answers them.
+
+---
+
+## 19. Serve: Projects (M9 step 2)
+
+This step **follows the Figma, not the PRD's applications** (TKP, 2026-11-26). The Figma member screens are:
+- `241:5344`: PJ1 Projects
+- `241:5571`: PJ3 Project Detail
+- `241:5692`: PJ4 Position Detail
+- `245:7719`: PJ5 Create a Project Post
+
+In the Figma, members post projects, which are "reviewed by the pastoral team within 3 days". People take part by contacting the coordinator directly (Call, WhatsApp or Email). That means PRD P-7 to P-9 aren't built: there are no in-app applications, applicant statuses or applicant board. P-4 (bulk upload) isn't built either, since the Figma has no such screen.
+
+There are no admin Figma screens. The admin page shows the post as the app will show it, beside a review panel.
+
+Screens:
+- Serve › Projects: `/serve`
+- One project: `/serve/projects/{id}`
+- The form: `/serve/projects/new` and `/serve/projects/{id}/edit`
+
+The mock is `src/mocks/project-api.ts`, with its seed in `src/mocks/seed/projects.ts` and its tests in `src/mocks/project-api.test.ts`.
+
+### Who
+
+| Key | Who | Lets them |
+|---|---|---|
+| `projects.view` | Tech Admin, Tech Team, Lead Pastor, Church Admin, Project Lead | Projects |
+| `projects.all` | Tech Admin, Tech Team, Lead Pastor, Church Admin | Every project. Without it, only the projects they lead |
+| `projects.review` | Tech Admin, Lead Pastor, Church Admin ("the pastoral team") | Approve, ask for changes, decline, feature, assign the Project Lead; their own projects go live at once |
+| `projects.lead` | Project Lead | Their projects: edit, mark positions filled or closed, close and reopen. Their new projects wait for review |
+
+- **Demo Project Lead:** Emmanuel Kalu (the Figma's "Emmanuel K."), who leads the Livestream Upgrade.
+- **Members** keep `serve.view`, which shows the learner side's "coming" page.
+
+### Statuses
+
+| `status` | Meaning |
+|---|---|
+| `submitted` | Waiting for review. Due within **3 days** of `submittedAt` (`reviewDueAt`); past that it's `overdue` |
+| `changes` | Sent back with a message |
+| `live` | On the app's Projects page |
+| `declined` | Not published, with a reason the member sees |
+| `closed` | Taken down; can be reopened |
+
+**Positions** are `open`, `filled` (set by hand) or `closed` (by hand, or once its closing date has passed, worked out daily in church time; P-11).
+- `closingSoon` means 7 days or less are left, the Figma's "Closing soon (5 days left)".
+- `contactTaps` counts taps on Call, WhatsApp and Email. It never records who tapped, and it isn't sent to the app.
+
+### Staff routes
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `GET /serve/projects?status=&q=&ministry=` | `{ items, counts (+ overdue), stats: { openPositions, openSpots, contactTaps }, scope, can }`. Posts waiting come first, oldest first | |
+| `GET /serve/projects/{id}` | `ProjectDetail`: the post, `positions`, `problems`, `history`, `can`, `options.leads` | |
+| `POST /serve/projects` | `ProjectInput`. From the pastoral team it's `live` at once; from a Project Lead it's `submitted` | `projects.create` |
+| `PUT /serve/projects/{id}` | `ProjectInput` + `rowVer`. A position keeps its state and its contact count | `projects.edit` (what changed) |
+| `POST /serve/projects/{id}/approve` | `{ rowVer }`. `422 NOT_READY` while `problems` isn't empty | `projects.approve` |
+| `POST /serve/projects/{id}/changes` | `{ message (10+), rowVer }` | `projects.changes` |
+| `POST /serve/projects/{id}/decline` | `{ reason (10+), rowVer }` | `projects.decline` |
+| `PUT /serve/projects/{id}/featured` | `{ on, rowVer }`. **One featured at a time** (Figma PJ1 "Featured project"); featuring one unfeatures the other | `projects.feature` / `.unfeature` |
+| `POST /serve/projects/{id}/close` · `/reopen` | `{ reason, rowVer }` / `{ rowVer }` | `projects.close` / `.reopen` |
+| `PUT /serve/projects/{id}/lead` | `{ leadId, rowVer }`. An active Project Lead, or null | `projects.lead` |
+| `PUT /serve/projects/{id}/positions/{positionId}` | `{ state: "open" \| "filled" \| "closed", rowVer }`. A position can't reopen after its closing date has passed | `projects.position` |
+
+**`ProjectInput`:** these are the Figma PJ5 fields.
+
+| Field | Rule |
+|---|---|
+| `name` | 3–80 characters |
+| `description` | 20–1,500 characters |
+| `ministry` | Media, Music, Education, Outreach, Children, Hospitality, Prayer, Facilities or Other (the Figma tags) |
+| `startDate` | Required |
+| `targetFinish` | Optional; after `startDate` |
+| `cover` | Upload |
+| `positions` | 1–12 of `{ title, responsibilities (one per line), skills[], commitment (free text, as in the Figma), format: "In person (Katy)" \| "Remote" \| "Hybrid", openings (1+), closingDate }` |
+| `contact` | `{ coordinators, role, phone, whatsapp, email, howToApply }`. A phone number **or** an email is required |
+
+The audit log has a "Serve" filter.
+
+### Ready to publish (`problems`)
+
+Approve stays off until the post is complete. These are blocking errors, never warnings, per TKP's rule. The checks are:
+- a name and a short description;
+- a start date, with the target finish after it;
+- a named coordinator, and a phone number or email;
+- at least one position;
+- each open position has a title, responsibilities, at least one opening, a time commitment, and a closing date that hasn't passed.
+
+The reviewer can ask the member to fix the post, or edit it themselves.
+
+### Routes for the member app (P-5: members only)
+
+| Call | Rules |
+|---|---|
+| `GET /public/projects` | Live projects, the featured one first, with only their open positions. No contact counts |
+| `POST /public/projects` | The PJ5 form plus `confirmed: true` ("I'm a TKP member and these details are accurate"). Answers 201 `{ id, reviewBy }`, which is 3 days on. The app shows "Reviewed by the pastoral team within 3 days" |
+| `POST /public/projects/positions/{id}/contact` | Counts one tap on Call, WhatsApp or Email |
+
+Guests and External Students get `403 MEMBERS_ONLY`.
+
+### Rules we added where the Figma is silent
+
+1. **The 3-day promise** shows as a deadline on each waiting post, with overdue ones counted on the tiles.
+2. **Projects the pastoral team creates go live directly.** A Project Lead's go through review, like a member's.
+3. **A Project Lead** sees and manages only the projects they're assigned to. They can't approve, decline or feature.
+4. **"Filled"** is set by hand: with no in-app applications, TKP Hub can't count acceptances.
+5. **Contact taps** are the only measure of interest, and stay anonymous.
+
+### Mock data
+
+| State | Projects |
+|---|---|
+| Live (5) | Impact House Classroom Team (featured), Livestream Upgrade Initiative (Figma PJ3/PJ4, with the "Closing soon" Sound and Video Volunteer), 168 Hours of Praise, Redeemer Tutoring, King's Touch Outreach |
+| Waiting for review (3) | the Food Drive (complete), Parking Ministry Refresh (overdue, incomplete), Choir Robes |
+| Other | 1 with changes requested, 1 declined, 1 closed |
+
+### Open questions
+
+- **The pastoral team.** Is it Lead Pastor, Church Admin and Tech Admin, or a named group?
+- **Messages to the member.** Should "Ask for changes" and "Decline" reach the member by email as well as in the app?
+- **Cover photos.** Size limits and image moderation. The mock keeps only the file name.

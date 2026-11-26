@@ -197,4 +197,28 @@ describe("landing and navigation", () => {
     const teacher = visibleNav((p) => can("course_author", p)).find((g) => g.id === "grow");
     expect(teacher?.tabs?.map((t) => t.label)).toEqual(["Dashboard", "Classes", "Certificates"]);
   });
+
+  it("M9 Care: moderators, Church Admin and Tech Admin moderate; Tech Team looks; private requests for moderators only", () => {
+    const care = (r: Role) => (["prayer.view", "prayer.moderate", "prayer.private", "prayer.settings"] as Permission[]).filter((p) => can(r, p));
+    expect(care("prayer_moderator")).toEqual(["prayer.view", "prayer.moderate", "prayer.private"]);
+    expect(care("church_admin")).toEqual(["prayer.view", "prayer.moderate", "prayer.settings"]);
+    expect(care("tech_admin")).toEqual(["prayer.view", "prayer.moderate", "prayer.settings"]);
+    expect(care("tech_team")).toEqual(["prayer.view"]);
+    for (const r of ["lead_pastor", "welcome_lead", "registrar", "tkp_member"] as Role[]) expect(care(r)).toEqual([]);
+    expect(landingPath("prayer_moderator")).toBe("/care");
+    const mod = visibleNav((p) => can("prayer_moderator", p)).find((g) => g.id === "care");
+    expect(mod?.tabs?.map((t) => t.label)).toEqual(["Prayer Wall", "Private requests"]);
+    const member = visibleNav((p) => can("tkp_member", p)).find((g) => g.id === "care");
+    expect(member?.tabs).toEqual([]);
+  });
+
+  it("M9 Serve: the pastoral team reviews projects; Tech Team looks; a Project Lead manages their own", () => {
+    const serve = (r: Role) => (["projects.view", "projects.all", "projects.review", "projects.lead"] as Permission[]).filter((p) => can(r, p));
+    for (const r of ["tech_admin", "church_admin", "lead_pastor"] as Role[]) expect(serve(r)).toEqual(["projects.view", "projects.all", "projects.review"]);
+    expect(serve("tech_team")).toEqual(["projects.view", "projects.all"]);
+    expect(serve("project_lead")).toEqual(["projects.view", "projects.lead"]);
+    for (const r of ["welcome_lead", "registrar", "prayer_moderator", "tkp_member"] as Role[]) expect(serve(r)).toEqual([]);
+    expect(landingPath("project_lead")).toBe("/serve");
+    expect(visibleNav((p) => can("tkp_member", p)).find((g) => g.id === "serve")?.tabs).toEqual([]);
+  });
 });

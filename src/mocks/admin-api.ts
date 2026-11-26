@@ -235,6 +235,8 @@ export const AUDIT_CATEGORY: Record<AuditCategory, (action: string) => boolean> 
   welcome: (a) => a.startsWith("welcome.") && !a.endsWith(".export"),
   connect: (a) => a.startsWith("connect."),
   grow: (a) => a.startsWith("learn.") && !a.endsWith(".export"),
+  care: (a) => a.startsWith("prayer."),
+  serve: (a) => a.startsWith("projects."),
   users: (a) => a.startsWith("user."),
   settings: (a) => a.startsWith("settings."),
   exports: (a) => a.endsWith(".export") || a === "welcome.qr.print" || a === "reports.share" || a === "reports.schedule.run",

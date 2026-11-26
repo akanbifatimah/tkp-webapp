@@ -1,5 +1,7 @@
 import type { LogRow } from "@/features/connect/types";
 import { seedGrow, type AssessmentRecord, type AttendanceRecord, type CertificateRecord, type CourseRecord, type EnrolmentRecord, type ExcusalRecord, type JoinLog, type ReminderRecord, type SubmissionRecord, type LearnPerson, type SessionRecord } from "./seed/grow";
+import { seedProjects, type ProjectRecord } from "./seed/projects";
+import { DEFAULT_PRAYER_SETTINGS, seedPrayer, type PrayerRecord, type PrivateRecord } from "./seed/prayer";
 import { seedForum, type PostRecord, type ThreadRecord } from "./seed/forum";
 import { seedAttendance, type AttendanceRow } from "./seed/attendance";
 import { seedAudit } from "./seed/audit";
@@ -77,6 +79,7 @@ const qr = seedQr();
 const reports = seedReports();
 const grow = seedGrow();
 const forum = seedForum(grow.enrolments);
+const prayer = seedPrayer();
 const staff = STAFF.map((s) => ({ ...s, roles: [...s.roles] })) as StaffRecord[];
 
 export const db = {
@@ -150,6 +153,12 @@ export const db = {
   /** The cohort forum (M8 step 5). */
   forumThreads: forum.threads as ThreadRecord[],
   forumPosts: forum.posts as PostRecord[],
+  /** The Prayer Wall (M9 step 1): wall posts, private requests to the prayer team, and its settings. */
+  prayerPosts: prayer.posts as PrayerRecord[],
+  prayerPrivate: prayer.privates as PrivateRecord[],
+  prayerSettings: { ...DEFAULT_PRAYER_SETTINGS },
+  /** Projects (M9 step 2): member project posts and their positions. */
+  projects: seedProjects() as ProjectRecord[],
 };
 
 /** Every sign-in, search, guest view, assignment, save and admin change is audited (FI-09, PRD F-5). */

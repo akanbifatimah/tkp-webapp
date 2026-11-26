@@ -49,6 +49,8 @@ import type {
   SessionInput,
   Upload,
 } from "@/features/grow/grow-types";
+import type { ProjectDetail, ProjectInput, ProjectsResponse } from "@/features/serve/project-types";
+import type { PosterIdentity, PrayerFilter, PrayerListResponse, PrayerPost, PrayerSettings, PrivateListResponse, PrivateRequest, PrivateStatus } from "@/features/care/prayer-types";
 import type { PrintLayout, QrCode, QrDatesInput, QrDetail, QrInput, QrListResponse, QrResolve } from "@/features/welcome/qr-types";
 import type { GuestRecord, GuestSearch, GuestSearchResponse, OverviewResponse, Scope } from "@/features/welcome/types";
 import type {
@@ -282,6 +284,38 @@ export const api = {
     setActive: (id: string, active: boolean, rowVer: number) => request<Schedule>(`/reports/schedules/${id}/${active ? "resume" : "pause"}`, { body: { rowVer } }),
     runNow: (id: string) => request<ReportRun>(`/reports/schedules/${id}/run`, { method: "POST" }),
     deleteSchedule: (id: string) => request<{ deleted: true }>(`/reports/schedules/${id}`, { method: "DELETE" }),
+  },
+  /** Serve: Projects (docs/API.md §19). */
+  projects: {
+    list: (q: { status: string; q: string; ministry: string }, signal?: AbortSignal) => request<ProjectsResponse>("/serve/projects", { query: q, signal }),
+    get: (id: string, signal?: AbortSignal) => request<ProjectDetail>(`/serve/projects/${id}`, { signal }),
+    create: (body: ProjectInput) => request<ProjectDetail>("/serve/projects", { body }),
+    update: (id: string, body: ProjectInput & { rowVer: number }) => request<ProjectDetail>(`/serve/projects/${id}`, { method: "PUT", body }),
+    approve: (id: string, rowVer: number) => request<ProjectDetail>(`/serve/projects/${id}/approve`, { body: { rowVer } }),
+    changes: (id: string, message: string, rowVer: number) => request<ProjectDetail>(`/serve/projects/${id}/changes`, { body: { message, rowVer } }),
+    decline: (id: string, reason: string, rowVer: number) => request<ProjectDetail>(`/serve/projects/${id}/decline`, { body: { reason, rowVer } }),
+    feature: (id: string, on: boolean, rowVer: number) => request<ProjectDetail>(`/serve/projects/${id}/featured`, { method: "PUT", body: { on, rowVer } }),
+    close: (id: string, reason: string, rowVer: number) => request<ProjectDetail>(`/serve/projects/${id}/close`, { body: { reason, rowVer } }),
+    reopen: (id: string, rowVer: number) => request<ProjectDetail>(`/serve/projects/${id}/reopen`, { body: { rowVer } }),
+    lead: (id: string, leadId: string | null, rowVer: number) => request<ProjectDetail>(`/serve/projects/${id}/lead`, { method: "PUT", body: { leadId, rowVer } }),
+    position: (id: string, pid: string, state: "open" | "filled" | "closed", rowVer: number) =>
+      request<ProjectDetail>(`/serve/projects/${id}/positions/${pid}`, { method: "PUT", body: { state, rowVer } }),
+  },
+  /** Care: Prayer Wall moderation (docs/API.md §18). */
+  prayer: {
+    list: (q: { filter: PrayerFilter; q: string; category: string }, signal?: AbortSignal) => request<PrayerListResponse>("/care/prayer", { query: q, signal }),
+    poster: (id: string) => request<PosterIdentity>(`/care/prayer/${id}/poster`),
+    approve: (id: string, rowVer: number) => request<{ post: PrayerPost }>(`/care/prayer/${id}/approve`, { body: { rowVer } }),
+    edit: (id: string, body: { text: string; category: string; reason: string; rowVer: number }) => request<{ post: PrayerPost }>(`/care/prayer/${id}`, { method: "PUT", body }),
+    remove: (id: string, reason: string, rowVer: number) => request<{ post: PrayerPost }>(`/care/prayer/${id}/remove`, { body: { reason, rowVer } }),
+    restore: (id: string, rowVer: number) => request<{ post: PrayerPost }>(`/care/prayer/${id}/restore`, { body: { rowVer } }),
+    note: (id: string, text: string) => request<{ post: PrayerPost }>(`/care/prayer/${id}/notes`, { body: { text } }),
+    answered: (id: string, answered: boolean, rowVer: number) => request<{ post: PrayerPost }>(`/care/prayer/${id}/answered`, { method: "PUT", body: { answered, rowVer } }),
+    settings: (body: PrayerSettings) => request<{ settings: PrayerSettings }>("/care/prayer/settings", { method: "PUT", body }),
+    private: (status: string, signal?: AbortSignal) => request<PrivateListResponse>("/care/prayer/private", { query: { status }, signal }),
+    prayOver: (id: string) => request<{ request: PrivateRequest }>(`/care/prayer/private/${id}/prayed`, { method: "POST" }),
+    privateStatus: (id: string, body: { status: PrivateStatus; rowVer: number; note?: string }) => request<{ request: PrivateRequest }>(`/care/prayer/private/${id}/status`, { method: "PUT", body }),
+    privateNote: (id: string, text: string) => request<{ request: PrivateRequest }>(`/care/prayer/private/${id}/notes`, { body: { text } }),
   },
   /** Grow, the Learn admin (docs/API.md §13). */
   learn: {

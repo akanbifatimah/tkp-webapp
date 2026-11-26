@@ -89,6 +89,11 @@ export const STAFF: StaffRecord[] = [
   s("u21", "Olusegun Ogunleye", ["course_author"], null),
   s("u22", "Esther Oyelaran", ["course_author"], null),
   s("u24", "Kemi Adebayo", ["grader"], null),
+  // Care (M9): the Intercessory Prayer Secretaries named in the Figma Prayer Wall
+  s("u25", "Folasade Ayeni", ["prayer_moderator"], null),
+  s("u26", "Tiwa Bakare", ["prayer_moderator"], null),
+  // Serve (M9): a Project Lead, the Figma's "Emmanuel K. · Project Lead"
+  s("u27", "Emmanuel Kalu", ["project_lead"], null),
   // A team role without a follow-up team (AC-04 message)
   s("u15", "Isaac Ward", ["integration_team"], null),
   // Signed in with a temporary password: must choose their own first (API-A7)

@@ -101,6 +101,30 @@ export const ACTION_LABEL: Record<string, string> = {
   "learn.forum.unshepherd": "Reopened a forum conversation for a pastor",
   "learn.forum.hide": "Hid a forum post",
   "learn.forum.restore": "Restored a hidden forum post",
+  "prayer.approve": "Approved a prayer request",
+  "prayer.edit": "Edited a prayer request",
+  "prayer.remove": "Removed a prayer request",
+  "prayer.restore": "Restored a prayer request",
+  "prayer.note": "Added a note to a prayer request",
+  "prayer.answered": "Marked a prayer request answered",
+  "prayer.unanswered": "Took the answered mark off a prayer request",
+  "prayer.identity.view": "Looked up who posted a prayer request",
+  "prayer.auto_hide": "Prayer request hidden by reports",
+  "prayer.settings.update": "Changed the Prayer Wall settings",
+  "prayer.private.prayed": "Prayed over a private request",
+  "prayer.private.status": "Changed a private request's status",
+  "prayer.private.note": "Added a note to a private request",
+  "projects.approve": "Approved a project post",
+  "projects.changes": "Asked for changes to a project post",
+  "projects.decline": "Declined a project post",
+  "projects.feature": "Featured a project",
+  "projects.unfeature": "Unfeatured a project",
+  "projects.close": "Closed a project",
+  "projects.reopen": "Reopened a project",
+  "projects.lead": "Changed a project's lead",
+  "projects.position": "Changed a position",
+  "projects.create": "Created a project",
+  "projects.edit": "Edited a project",
   "connect.assign": "Assigned a guest",
   "connect.guest.view": "Opened a guest in Connect",
   "connect.log.save": "Saved a follow-up log",
@@ -119,8 +143,8 @@ export const actionLabel = (a: string) => ACTION_LABEL[a] ?? a;
 
 /** Tone for the action chip: red for failures and removals, gold for exports and admin changes. */
 export function actionTone(a: string): "crit" | "gold" | "maroon" | "neutral" {
-  if (["sign_in_failed", "mfa.failed", "user.deactivate", "user.sessions.revoke", "welcome.cellmap.remove", "welcome.service.delete", "welcome.service.retire", "welcome.qr.delete", "welcome.qr.pause", "welcome.duplicates.merge", "welcome.import.undo", "reports.schedule.delete", "reports.schedule.pause", "learn.course.archive", "learn.course.delete", "learn.session.delete", "learn.enrol.withdraw", "learn.resource.remove", "learn.assessment.delete", "learn.review.change", "learn.certificate.revoke", "learn.forum.hide"].includes(a)) return "crit";
-  if (a.endsWith(".export") || a.startsWith("user.") || a.startsWith("settings.") || a.startsWith("welcome.cellmap.") || a.startsWith("welcome.service.") || a.startsWith("welcome.qr.") || a.startsWith("welcome.duplicates.") || a.startsWith("welcome.import.") || (a.startsWith("reports.") && a !== "reports.view") || a.startsWith("learn.")) return "gold";
+  if (["sign_in_failed", "mfa.failed", "user.deactivate", "user.sessions.revoke", "welcome.cellmap.remove", "welcome.service.delete", "welcome.service.retire", "welcome.qr.delete", "welcome.qr.pause", "welcome.duplicates.merge", "welcome.import.undo", "reports.schedule.delete", "reports.schedule.pause", "learn.course.archive", "learn.course.delete", "learn.session.delete", "learn.enrol.withdraw", "learn.resource.remove", "learn.assessment.delete", "learn.review.change", "learn.certificate.revoke", "learn.forum.hide", "prayer.remove", "prayer.auto_hide", "prayer.identity.view", "projects.decline", "projects.close"].includes(a)) return "crit";
+  if (a.endsWith(".export") || a.startsWith("user.") || a.startsWith("settings.") || a.startsWith("welcome.cellmap.") || a.startsWith("welcome.service.") || a.startsWith("welcome.qr.") || a.startsWith("welcome.duplicates.") || a.startsWith("welcome.import.") || (a.startsWith("reports.") && a !== "reports.view") || a.startsWith("learn.") || a.startsWith("prayer.") || a.startsWith("projects.")) return "gold";
   if (a.startsWith("sign_") || a.startsWith("mfa.") || a.startsWith("password.")) return "neutral";
   return "maroon";
 }
@@ -130,6 +154,8 @@ export const CATEGORIES: { id: AuditCategory; label: string }[] = [
   { id: "welcome", label: "Welcome" },
   { id: "connect", label: "Connect" },
   { id: "grow", label: "Grow" },
+  { id: "care", label: "Care" },
+  { id: "serve", label: "Serve" },
   { id: "exports", label: "Exports" },
   { id: "users", label: "Users and roles" },
   { id: "settings", label: "Settings" },
@@ -183,6 +209,17 @@ export const FIELD_LABEL: Record<string, string> = {
   outcome: "Outcome",
   shared: "Note shared",
   serial: "Serial number",
+  reportThreshold: "Reports that hide a request",
+  distressWords: "Distress words",
+  retentionDays: "Days on the wall",
+  purgeDays: "Days before removed requests are deleted",
+  mode: "New requests",
+  careResources: "Care resources numbers",
+  featured: "Featured",
+  lead: "Project Lead",
+  position: "Position",
+  message: "Message",
+  answered: "Answered",
   list: "List",
   thread: "Conversation",
   pinned: "Pinned",

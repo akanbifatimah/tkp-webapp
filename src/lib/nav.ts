@@ -119,8 +119,29 @@ export const NAV: NavGroup[] = [
       { label: "Drop-off report", to: "/grow/drop-off", permission: "learn.all" },
     ],
   },
-  { id: "care", step: 5, label: "Care", icon: HeartHandshake, to: "/care", permission: "care.view", planned: true },
-  { id: "serve", step: 6, label: "Serve", icon: Sparkles, to: "/serve", permission: "serve.view", planned: true },
+  {
+    // M9: Prayer Wall moderation. Members (care.view only) still see the "coming" page.
+    id: "care",
+    step: 5,
+    label: "Care",
+    icon: HeartHandshake,
+    to: "/care",
+    permission: "care.view",
+    tabs: [
+      { label: "Prayer Wall", to: "/care", permission: "prayer.view", end: true },
+      { label: "Private requests", to: "/care/private", permission: "prayer.private" },
+    ],
+  },
+  {
+    // M9: Projects (Figma PJ1–PJ5). Members (serve.view only) still see the "coming" page.
+    id: "serve",
+    step: 6,
+    label: "Serve",
+    icon: Sparkles,
+    to: "/serve",
+    permission: "serve.view",
+    tabs: [{ label: "Projects", to: "/serve", permission: "projects.view", end: true }],
+  },
   { id: "lead", step: 7, label: "Lead", icon: Crown, to: "/lead", permission: "lead.view", planned: true },
   { id: "go", step: 8, label: "Go", icon: Compass, to: "/go", permission: "go.view", planned: true },
   { id: "transform", step: 9, label: "Transform", icon: BookOpen, to: "/transform", permission: "transform.view", planned: true },

@@ -102,6 +102,16 @@ export const PERMISSIONS = [
   "learn.manage",
   "learn.author",
   "learn.export",
+  // M9 Care: Prayer Wall moderation (PRD PR-4, PR-5, PR-7, PR-9, PR-11, OS-1, OS-2)
+  "prayer.view",
+  "prayer.moderate",
+  "prayer.private",
+  "prayer.settings",
+  // M9 Serve: Projects, following the Figma (member posts reviewed by the pastoral team)
+  "projects.view",
+  "projects.all",
+  "projects.review",
+  "projects.lead",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -131,6 +141,13 @@ const REPORTS_SHARE: Permission[] = ["reports.view", "reports.share"];
  * classes they are assigned to (U12), so they lack learn.all.
  */
 const LEARN_OWNER: Permission[] = ["learn.view", "learn.all", "learn.manage", "learn.author", "learn.export"];
+/**
+ * Prayer Wall (TKP, 2026-11-26): Prayer Moderators, Church Admin and Tech Admin
+ * moderate; Tech Team looks; private requests go to the Prayer Moderators only.
+ */
+const PRAYER_ADMIN: Permission[] = ["prayer.view", "prayer.moderate", "prayer.settings"];
+/** The pastoral team reviews member project posts (Figma PJ5 "Reviewed by the pastoral team within 3 days"). */
+const PROJECT_REVIEW: Permission[] = ["projects.view", "projects.all", "projects.review"];
 const LATER_ALL: Permission[] = ["grow.view", "care.view", "serve.view", "lead.view", "go.view", "transform.view"];
 
 /**
@@ -141,10 +158,10 @@ const LATER_ALL: Permission[] = ["grow.view", "care.view", "serve.view", "lead.v
 const EXPORT: Permission[] = ["welcome.export"];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  tech_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit", "admin.settings", "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE, ...LEARN_OWNER],
-  tech_team: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.audit", "qr.view", "welcome.duplicates.view", "reports.view", "learn.view", "learn.all"],
-  lead_pastor: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "qr.view", ...REPORTS_SHARE],
-  church_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE, "learn.view", "learn.all", "learn.export"],
+  tech_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit", "admin.settings", "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE, ...LEARN_OWNER, ...PRAYER_ADMIN, ...PROJECT_REVIEW],
+  tech_team: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.audit", "qr.view", "welcome.duplicates.view", "reports.view", "learn.view", "learn.all", "prayer.view", "projects.view", "projects.all"],
+  lead_pastor: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "qr.view", ...REPORTS_SHARE, ...PROJECT_REVIEW],
+  church_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE, "learn.view", "learn.all", "learn.export", ...PRAYER_ADMIN, ...PROJECT_REVIEW],
   church_office_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", "reports.view"],
   church_office: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view"],
   // PRD IL-5 / IL-6: the integration lead keeps the cell and ZIP map.
@@ -157,8 +174,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   registrar: ["grow.view", ...LEARN_OWNER],
   course_author: ["grow.view", "learn.view", "learn.author"],
   grader: ["grow.view", "learn.view"],
-  project_lead: ["serve.view"],
-  prayer_moderator: ["care.view"],
+  project_lead: ["serve.view", "projects.view", "projects.lead"],
+  prayer_moderator: ["care.view", "prayer.view", "prayer.moderate", "prayer.private"],
 };
 
 /* ------------------------------------------------------------- Connect policy */
@@ -250,8 +267,8 @@ export const ROLE_SUMMARY: Record<Role, string> = {
   registrar: "Owns Grow: creates and publishes classes, assigns teachers and graders, keeps the rosters and waitlists, exports.",
   course_author: "Teaches the classes the Registrar assigns: builds their sessions and content. Sees only those classes.",
   grader: "Marks the classes the Registrar assigns. Sees only those classes.",
-  project_lead: "Runs their own projects and applicants (M9).",
-  prayer_moderator: "Moderates the Prayer Wall (M9).",
+  project_lead: "Coordinates their own projects: edits them, and marks positions filled or closed. Can't approve posts.",
+  prayer_moderator: "Moderates the Prayer Wall and prays over the private requests sent to the prayer team.",
 };
 
 /** Where each permission key sits, for the read-only Roles page. */
@@ -295,4 +312,12 @@ export const PERMISSION_LABEL: Record<Permission, { area: string; label: string 
   "learn.manage": { area: "Grow", label: "Create and publish classes; rosters and waitlists" },
   "learn.author": { area: "Grow", label: "Build class sessions and content" },
   "learn.export": { area: "Grow", label: "Export rosters" },
+  "prayer.view": { area: "Care", label: "Prayer Wall moderation queue" },
+  "prayer.moderate": { area: "Care", label: "Approve, edit, remove and restore prayer requests" },
+  "prayer.private": { area: "Care", label: "Private requests to the prayer team" },
+  "prayer.settings": { area: "Care", label: "Prayer Wall settings" },
+  "projects.view": { area: "Serve", label: "Projects" },
+  "projects.all": { area: "Serve", label: "Every project, not only their own" },
+  "projects.review": { area: "Serve", label: "Review member project posts; publish, feature and close projects" },
+  "projects.lead": { area: "Serve", label: "Manage the projects they coordinate" },
 };
