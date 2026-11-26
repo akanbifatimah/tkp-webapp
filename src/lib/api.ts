@@ -19,6 +19,26 @@ import type { DuplicatesResponse, MergeInput, MergeResult, UnmergeResult } from 
 import type { ImportJob, ImportKind, ImportListResponse, ImportPatch, ImportSummary } from "@/features/welcome/import-types";
 import type { LcmResponse } from "@/features/welcome/lcm-types";
 import type { Period, Recipient, ReportData, ReportId, ReportRun, ReportsResponse, Schedule, ScheduleInput, SchedulesResponse, ShareInput } from "@/features/reports/report-types";
+import type {
+  Assessment,
+  AssessmentInput,
+  AttendanceInput,
+  AttendanceSheet,
+  CourseDetail,
+  CourseInput,
+  ReviewInput,
+  SubmissionDetail,
+  SubmissionsResponse,
+  CoursesResponse,
+  Enrolment,
+  GrowOverview,
+  PersonHit,
+  RosterResponse,
+  Session,
+  SessionDetail,
+  SessionInput,
+  Upload,
+} from "@/features/grow/grow-types";
 import type { PrintLayout, QrCode, QrDatesInput, QrDetail, QrInput, QrListResponse, QrResolve } from "@/features/welcome/qr-types";
 import type { GuestRecord, GuestSearch, GuestSearchResponse, OverviewResponse, Scope } from "@/features/welcome/types";
 import type {
@@ -242,6 +262,55 @@ export const api = {
     setActive: (id: string, active: boolean, rowVer: number) => request<Schedule>(`/reports/schedules/${id}/${active ? "resume" : "pause"}`, { body: { rowVer } }),
     runNow: (id: string) => request<ReportRun>(`/reports/schedules/${id}/run`, { method: "POST" }),
     deleteSchedule: (id: string) => request<{ deleted: true }>(`/reports/schedules/${id}`, { method: "DELETE" }),
+  },
+  /** Grow, the Learn admin (docs/API.md §13). */
+  learn: {
+    overview: (signal?: AbortSignal) => request<GrowOverview>("/learn/overview", { signal }),
+    courses: (signal?: AbortSignal) => request<CoursesResponse>("/learn/courses", { signal }),
+    course: (id: string, signal?: AbortSignal) => request<CourseDetail>(`/learn/courses/${id}`, { signal }),
+    create: (body: CourseInput) => request<{ course: CourseDetail }>("/learn/courses", { body }),
+    update: (id: string, body: CourseInput & { rowVer: number }) =>
+      request<{ course: CourseDetail; moved: number; promoted: string[] }>(`/learn/courses/${id}`, { method: "PUT", body }),
+    publish: (id: string, rowVer: number) => request<{ course: CourseDetail }>(`/learn/courses/${id}/publish`, { body: { rowVer } }),
+    registration: (id: string, open: boolean, rowVer: number) => request<{ course: CourseDetail }>(`/learn/courses/${id}/registration`, { body: { open, rowVer } }),
+    archive: (id: string, rowVer: number) => request<{ course: CourseDetail }>(`/learn/courses/${id}/archive`, { body: { rowVer } }),
+    remove: (id: string) => request<{ deleted: true }>(`/learn/courses/${id}`, { method: "DELETE" }),
+    createSession: (courseId: string, body: Partial<SessionInput>) => request<{ session: Session; course: CourseDetail }>(`/learn/courses/${courseId}/sessions`, { body }),
+    updateSession: (id: string, body: SessionInput & { rowVer: number; applyTo?: "new" | "everyone" }) =>
+      request<{ session: Session }>(`/learn/sessions/${id}`, { method: "PUT", body }),
+    publishSession: (id: string, rowVer: number, publish = true) => request<{ session: Session }>(`/learn/sessions/${id}/${publish ? "publish" : "unpublish"}`, { body: { rowVer } }),
+    deleteSession: (id: string) => request<{ deleted: true }>(`/learn/sessions/${id}`, { method: "DELETE" }),
+    upload: (purpose: "video" | "handout" | "resource", file: File) => {
+      const body = new FormData();
+      body.append("purpose", purpose);
+      body.append("file", file);
+      return request<{ file: Upload }>("/learn/uploads", { body });
+    },
+    addResource: (courseId: string, file: Upload) => request<{ course: CourseDetail }>(`/learn/courses/${courseId}/resources`, { body: { file } }),
+    removeResource: (courseId: string, fileId: string) => request<{ course: CourseDetail }>(`/learn/courses/${courseId}/resources/${fileId}`, { method: "DELETE" }),
+    roster: (courseId: string, signal?: AbortSignal) => request<RosterResponse>(`/learn/courses/${courseId}/roster`, { signal }),
+    people: (courseId: string, q: string, signal?: AbortSignal) => request<{ items: PersonHit[] }>(`/learn/courses/${courseId}/people`, { query: { q }, signal }),
+    enrol: (courseId: string, body: { personId: string; waive?: string }) => request<{ enrolment: Enrolment }>(`/learn/courses/${courseId}/roster`, { body }),
+    withdraw: (enrolmentId: string, reason: string) => request<{ enrolment: Enrolment; promoted: string[] }>(`/learn/enrolments/${enrolmentId}/withdraw`, { body: { reason } }),
+    promote: (enrolmentId: string) => request<{ enrolment: Enrolment }>(`/learn/enrolments/${enrolmentId}/promote`, { method: "POST" }),
+    session: (id: string, signal?: AbortSignal) => request<SessionDetail>(`/learn/sessions/${id}`, { signal }),
+    attendance: (sessionId: string, signal?: AbortSignal) => request<AttendanceSheet>(`/learn/sessions/${sessionId}/attendance`, { signal }),
+    saveAttendance: (sessionId: string, body: AttendanceInput) => request<AttendanceSheet>(`/learn/sessions/${sessionId}/attendance`, { method: "PUT", body }),
+    assessment: (id: string, signal?: AbortSignal) => request<Assessment>(`/learn/assessments/${id}`, { signal }),
+    createAssessment: (courseId: string, body: AssessmentInput) => request<{ assessment: Assessment; movedFinal: string | null }>(`/learn/courses/${courseId}/assessments`, { body }),
+    updateAssessment: (id: string, body: AssessmentInput & { rowVer: number }) =>
+      request<{ assessment: Assessment; movedFinal: string | null }>(`/learn/assessments/${id}`, { method: "PUT", body }),
+    publishAssessment: (id: string, rowVer: number, publish = true) => request<{ assessment: Assessment }>(`/learn/assessments/${id}/${publish ? "publish" : "unpublish"}`, { body: { rowVer } }),
+    deleteAssessment: (id: string) => request<{ deleted: true }>(`/learn/assessments/${id}`, { method: "DELETE" }),
+    submissions: (assessmentId: string, signal?: AbortSignal) => request<SubmissionsResponse>(`/learn/assessments/${assessmentId}/submissions`, { signal }),
+    submission: (id: string, signal?: AbortSignal) => request<SubmissionDetail>(`/learn/submissions/${id}`, { signal }),
+    review: (id: string, body: ReviewInput) => request<SubmissionDetail>(`/learn/submissions/${id}/review`, { method: "PUT", body }),
+    remind: (assessmentId: string) => request<{ sent: number }>(`/learn/assessments/${assessmentId}/remind`, { method: "POST" }),
+    excuse: (assessmentId: string, enrolmentId: string, reason: string | null) =>
+      reason === null
+        ? request<{ excused: boolean }>(`/learn/assessments/${assessmentId}/excused/${enrolmentId}`, { method: "DELETE" })
+        : request<{ excused: boolean }>(`/learn/assessments/${assessmentId}/excused/${enrolmentId}`, { method: "PUT", body: { reason } }),
+    logRosterExport: (courseId: string) => request<{ logged: true }>(`/learn/courses/${courseId}/roster/export`, { method: "POST" }),
   },
   imports: {
     list: (signal?: AbortSignal) => request<ImportListResponse>("/welcome/imports", { signal }),

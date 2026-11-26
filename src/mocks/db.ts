@@ -1,4 +1,5 @@
 import type { LogRow } from "@/features/connect/types";
+import { seedGrow, type AssessmentRecord, type AttendanceRecord, type CourseRecord, type EnrolmentRecord, type ExcusalRecord, type JoinLog, type ReminderRecord, type SubmissionRecord, type LearnPerson, type SessionRecord } from "./seed/grow";
 import { seedAttendance, type AttendanceRow } from "./seed/attendance";
 import { seedAudit } from "./seed/audit";
 import { addDuplicates } from "./seed/duplicates";
@@ -60,6 +61,7 @@ export type SettingsRecord = {
 const seeded = addDuplicates(seedConnect());
 const qr = seedQr();
 const reports = seedReports();
+const grow = seedGrow();
 const staff = STAFF.map((s) => ({ ...s, roles: [...s.roles] })) as StaffRecord[];
 
 export const db = {
@@ -113,6 +115,19 @@ export const db = {
   /** Scheduled report sharing (PL-4, W-9) and every share or scheduled send. */
   reportSchedules: reports.schedules as ScheduleRecord[],
   reportRuns: reports.runs as RunRecord[],
+  /** Grow, the Learn admin (M8, §13): people who learn, classes, sessions and enrolments. */
+  learnPeople: grow.people as LearnPerson[],
+  learnCourses: grow.courses as CourseRecord[],
+  learnSessions: grow.sessions as SessionRecord[],
+  learnEnrolments: grow.enrolments as EnrolmentRecord[],
+  /** Join and recording logs from the meeting platform and the player (M8 step 2). */
+  learnLogs: grow.logs as JoinLog[],
+  learnAttendance: grow.attendance as AttendanceRecord[],
+  learnAssessments: grow.assessments as AssessmentRecord[],
+  /** Answers and the pastor's review (M8 step 3), people excused, and reminder emails. */
+  learnSubmissions: grow.submissions as SubmissionRecord[],
+  learnExcusals: grow.excusals as ExcusalRecord[],
+  learnReminders: grow.reminders as ReminderRecord[],
 };
 
 /** Every sign-in, search, guest view, assignment, save and admin change is audited (FI-09, PRD F-5). */

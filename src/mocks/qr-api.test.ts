@@ -109,11 +109,11 @@ describe("change, quick edit, renew (QR-4, QR-9)", () => {
   it("a full edit keeps the printed address and logs what changed", () => {
     const c = rec("qr-6");
     const slug = c.slug;
-    const r = updateQr(user(INTEGRATION_ADMIN), "qr-6", { name: c.name, destination: "course", targetId: "crs-2", serviceId: null, activeFrom: c.activeFrom, expiresAt: null, note: c.note, caption: c.caption, rowVer: c.rowVer });
+    const r = updateQr(user(INTEGRATION_ADMIN), "qr-6", { name: c.name, destination: "course", targetId: "c-wb", serviceId: null, activeFrom: c.activeFrom, expiresAt: null, note: c.note, caption: c.caption, rowVer: c.rowVer });
     if (!r.ok) throw new Error(r.message);
     expect(r.body.code.slug).toBe(slug);
-    expect(r.body.code.destinationLabel).toBe("Course · Baptism Class");
-    expect(last()).toMatchObject({ action: "welcome.qr.update", meta: { before: { destination: "Course · Foundation Class" }, after: { destination: "Course · Baptism Class" } } });
+    expect(r.body.code.destinationLabel).toBe("Course · Water Baptism Class");
+    expect(last()).toMatchObject({ action: "welcome.qr.update", meta: { before: { destination: "Course · New Believers Class" }, after: { destination: "Course · Water Baptism Class" } } });
   });
 
   it("pause, resume and turn on a draft", () => {

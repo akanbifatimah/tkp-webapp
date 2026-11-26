@@ -96,6 +96,12 @@ export const PERMISSIONS = [
   "welcome.import.followups",
   "reports.view",
   "reports.share",
+  // M8 Grow, the Learn admin (PRD 2 rule 3, U11-U13, RG-1 to RG-5)
+  "learn.view",
+  "learn.all",
+  "learn.manage",
+  "learn.author",
+  "learn.export",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -119,6 +125,12 @@ const QR_PRINT: Permission[] = ["qr.view", "qr.print"];
 const DUP_MERGE: Permission[] = ["welcome.duplicates.view", "welcome.duplicates.merge"];
 /** PRD PL-4, PL-5: the Reports hub. Everyone who sees LCM sees the hub; leadership and the admins share. */
 const REPORTS_SHARE: Permission[] = ["reports.view", "reports.share"];
+/**
+ * PRD 2 rule 3: the Registrar owns students, courses, exams and results; Church
+ * Admin views and exports, never edits. Course authors and graders see only the
+ * classes they are assigned to (U12), so they lack learn.all.
+ */
+const LEARN_OWNER: Permission[] = ["learn.view", "learn.all", "learn.manage", "learn.author", "learn.export"];
 const LATER_ALL: Permission[] = ["grow.view", "care.view", "serve.view", "lead.view", "go.view", "transform.view"];
 
 /**
@@ -129,10 +141,10 @@ const LATER_ALL: Permission[] = ["grow.view", "care.view", "serve.view", "lead.v
 const EXPORT: Permission[] = ["welcome.export"];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  tech_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit", "admin.settings", "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE],
-  tech_team: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.audit", "qr.view", "welcome.duplicates.view", "reports.view"],
+  tech_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.users", "admin.audit", "admin.settings", "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE, ...LEARN_OWNER],
+  tech_team: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "admin.audit", "qr.view", "welcome.duplicates.view", "reports.view", "learn.view", "learn.all"],
   lead_pastor: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "qr.view", ...REPORTS_SHARE],
-  church_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE],
+  church_admin: ["dashboard.view", ...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", ...LATER_ALL, "config.cells", "config.services", ...QR_MANAGE, ...DUP_MERGE, "welcome.import", "welcome.import.followups", ...REPORTS_SHARE, "learn.view", "learn.all", "learn.export"],
   church_office_admin: [...WELCOME_ALL, ...EXPORT, ...CONNECT_TABS, "belong.view", "reports.view"],
   church_office: [...WELCOME_ALL, ...CONNECT_TABS, "belong.view"],
   // PRD IL-5 / IL-6: the integration lead keeps the cell and ZIP map.
@@ -142,9 +154,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   welcome_team: ["welcome.overview.view", "welcome.lookup.view", "connect.journey.view", ...QR_PRINT],
   tkp_member: ["member.home", "belong.view", ...LATER_ALL],
   // PRD roles: their module keys arrive with Part 2.
-  registrar: ["grow.view"],
-  course_author: ["grow.view"],
-  grader: ["grow.view"],
+  registrar: ["grow.view", ...LEARN_OWNER],
+  course_author: ["grow.view", "learn.view", "learn.author"],
+  grader: ["grow.view", "learn.view"],
   project_lead: ["serve.view"],
   prayer_moderator: ["care.view"],
 };
@@ -208,7 +220,7 @@ export function landingPath(role: Role): string {
   if (can(role, "dashboard.view")) return "/dashboard";
   if (can(role, "welcome.overview.view")) return "/welcome";
   if (can(role, "member.home")) return "/home";
-  if (can(role, "grow.view")) return "/grow";
+  if (can(role, "learn.view") || can(role, "grow.view")) return "/grow";
   if (can(role, "serve.view")) return "/serve";
   if (can(role, "care.view")) return "/care";
   return "/no-access";
@@ -227,7 +239,7 @@ export const ROLE_SUMMARY: Record<Role, string> = {
   tech_admin: "Everything, including users, audit log and settings. Saves logs for guests assigned to them.",
   tech_team: "Sees every module to support and test it. Reads the audit log. Cannot save or assign.",
   lead_pastor: "Sees Welcome and both Connect teams; assigns guests and saves logs for guests assigned to them.",
-  church_admin: "Church dashboard, Welcome and both Connect teams; assigns guests; keeps the services, cell map and QR codes; merges duplicate guests; imports past records. Never saves logs.",
+  church_admin: "Church dashboard, Welcome and both Connect teams; assigns guests; keeps the services, cell map and QR codes; merges duplicate guests; imports past records. Sees and exports Grow, never edits it. Never saves logs.",
   church_office_admin: "Leads the Church Office team: sees and assigns the team's guests.",
   church_office: "Church Office caller: works the guests assigned to them.",
   integration_admin: "Leads the Integration Team: sees and assigns the team's guests; keeps the cell map and QR codes; merges duplicate guests; imports past records.",
@@ -235,9 +247,9 @@ export const ROLE_SUMMARY: Record<Role, string> = {
   welcome_lead: "Welcome overview, guest lookup and LCM Metrics; exports guest PDFs; prints QR codes; merges duplicate guests; imports past guest entries.",
   welcome_team: "Welcome overview and guest lookup; prints QR codes.",
   tkp_member: "Member home only. No staff areas.",
-  registrar: "Owns courses, exams, results and students (Grow, coming in M8).",
-  course_author: "Builds the courses and exams the Registrar assigns (M8).",
-  grader: "Marks the answers the Registrar assigns (M8).",
+  registrar: "Owns Grow: creates and publishes classes, assigns teachers and graders, keeps the rosters and waitlists, exports.",
+  course_author: "Teaches the classes the Registrar assigns: builds their sessions and content. Sees only those classes.",
+  grader: "Marks the classes the Registrar assigns. Sees only those classes.",
   project_lead: "Runs their own projects and applicants (M9).",
   prayer_moderator: "Moderates the Prayer Wall (M9).",
 };
@@ -278,4 +290,9 @@ export const PERMISSION_LABEL: Record<Permission, { area: string; label: string 
   "welcome.import.followups": { area: "Welcome", label: "Import follow-up tracker records" },
   "reports.view": { area: "Reports", label: "Reports hub" },
   "reports.share": { area: "Reports", label: "Share reports and schedule them" },
+  "learn.view": { area: "Grow", label: "Grow dashboard and classes" },
+  "learn.all": { area: "Grow", label: "Every class, not only assigned ones" },
+  "learn.manage": { area: "Grow", label: "Create and publish classes; rosters and waitlists" },
+  "learn.author": { area: "Grow", label: "Build class sessions and content" },
+  "learn.export": { area: "Grow", label: "Export rosters" },
 };

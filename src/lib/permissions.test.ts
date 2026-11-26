@@ -177,4 +177,22 @@ describe("landing and navigation", () => {
     expect(can("integration_admin", "belong.view")).toBe(false);
     expect(can("tkp_member", "transform.view")).toBe(true);
   });
+
+  it("M8 Grow: the Registrar owns it; Church Admin views and exports; authors and graders see their own classes only", () => {
+    const grow = (r: Role) => (["learn.view", "learn.all", "learn.manage", "learn.author", "learn.export"] as Permission[]).filter((p) => can(r, p));
+    expect(grow("registrar")).toEqual(["learn.view", "learn.all", "learn.manage", "learn.author", "learn.export"]);
+    expect(grow("tech_admin")).toEqual(["learn.view", "learn.all", "learn.manage", "learn.author", "learn.export"]);
+    expect(grow("church_admin")).toEqual(["learn.view", "learn.all", "learn.export"]);
+    expect(grow("tech_team")).toEqual(["learn.view", "learn.all"]);
+    expect(grow("course_author")).toEqual(["learn.view", "learn.author"]);
+    expect(grow("grader")).toEqual(["learn.view"]);
+    for (const r of ["lead_pastor", "church_office", "welcome_lead", "tkp_member"] as Role[]) expect(grow(r)).toEqual([]);
+    expect(landingPath("registrar")).toBe("/grow");
+    expect(landingPath("course_author")).toBe("/grow");
+    // Members keep the Grow group (its "coming" page) but no Learn admin tabs.
+    const member = visibleNav((p) => can("tkp_member", p)).find((g) => g.id === "grow");
+    expect(member?.tabs).toEqual([]);
+    const registrar = visibleNav((p) => can("registrar", p)).find((g) => g.id === "grow");
+    expect(registrar?.tabs?.map((t) => t.label)).toEqual(["Dashboard", "Classes"]);
+  });
 });

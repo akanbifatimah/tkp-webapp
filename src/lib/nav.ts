@@ -103,7 +103,20 @@ export const NAV: NavGroup[] = [
     ],
   },
   { id: "belong", step: 3, label: "Belong", icon: Users, to: "/belong", permission: "belong.view", planned: true },
-  { id: "grow", step: 4, label: "Grow", icon: Sprout, to: "/grow", permission: "grow.view", planned: true },
+  {
+    // M8: the Learn admin (Figma Grow screens). People with grow.view but no
+    // learn.view (members) still see the "coming" page for the learner side.
+    id: "grow",
+    step: 4,
+    label: "Grow",
+    icon: Sprout,
+    to: "/grow",
+    permission: "grow.view",
+    tabs: [
+      { label: "Dashboard", to: "/grow", permission: "learn.view", end: true },
+      { label: "Classes", to: "/grow/classes", permission: "learn.view" },
+    ],
+  },
   { id: "care", step: 5, label: "Care", icon: HeartHandshake, to: "/care", permission: "care.view", planned: true },
   { id: "serve", step: 6, label: "Serve", icon: Sparkles, to: "/serve", permission: "serve.view", planned: true },
   { id: "lead", step: 7, label: "Lead", icon: Crown, to: "/lead", permission: "lead.view", planned: true },

@@ -42,6 +42,16 @@ const AuditPage = lazy(() => import("@/features/admin/AuditPage").then((m) => ({
 const CellsPage = lazy(() => import("@/features/admin/CellsPage").then((m) => ({ default: m.CellsPage })));
 const ServicesPage = lazy(() => import("@/features/admin/ServicesPage").then((m) => ({ default: m.ServicesPage })));
 const SettingsPage = lazy(() => import("@/features/admin/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const GrowDashboardPage = lazy(() => import("@/features/grow/GrowDashboardPage").then((m) => ({ default: m.GrowDashboardPage })));
+const ClassesPage = lazy(() => import("@/features/grow/ClassesPage").then((m) => ({ default: m.ClassesPage })));
+const ClassPage = lazy(() => import("@/features/grow/ClassPage").then((m) => ({ default: m.ClassPage })));
+const ClassFormPage = lazy(() => import("@/features/grow/ClassFormPage").then((m) => ({ default: m.ClassFormPage })));
+const SessionEditorPage = lazy(() => import("@/features/grow/SessionEditorPage").then((m) => ({ default: m.SessionEditorPage })));
+const SessionDetailPage = lazy(() => import("@/features/grow/SessionDetailPage").then((m) => ({ default: m.SessionDetailPage })));
+const AttendancePage = lazy(() => import("@/features/grow/AttendancePage").then((m) => ({ default: m.AttendancePage })));
+const AssessmentBuilderPage = lazy(() => import("@/features/grow/AssessmentBuilderPage").then((m) => ({ default: m.AssessmentBuilderPage })));
+const SubmissionsPage = lazy(() => import("@/features/grow/SubmissionsPage").then((m) => ({ default: m.SubmissionsPage })));
+const ReviewPage = lazy(() => import("@/features/grow/ReviewPage").then((m) => ({ default: m.ReviewPage })));
 const UiKitPage = lazy(() => import("@/features/dev/UiKitPage").then((m) => ({ default: m.UiKitPage })));
 
 const loading = <Skeleton className="mt-6 h-96 w-full rounded-3xl" />;
@@ -60,6 +70,18 @@ function AdminIndex() {
   return admin ? <Navigate to={admin.to} replace /> : <AccessDenied />;
 }
 
+/** Grow: staff with the Learn admin see the dashboard; members see what is coming for learners. */
+function GrowIndex() {
+  const { has } = useAuth();
+  return has("learn.view") ? (
+    <Suspense fallback={loading}>
+      <GrowDashboardPage />
+    </Suspense>
+  ) : (
+    <ModuleComing spec={COMING_LATER.grow!} />
+  );
+}
+
 const page = (permission: Permission, element: React.ReactNode, kind: "connect" | "generic" = "generic") => (
   <RequirePermission permission={permission} kind={kind}>
     <Suspense fallback={loading}>{element}</Suspense>
@@ -69,7 +91,6 @@ const page = (permission: Permission, element: React.ReactNode, kind: "connect" 
 const laterRoutes: RouteObject[] = (
   [
     ["belong", "belong.view"],
-    ["grow", "grow.view"],
     ["care", "care.view"],
     ["serve", "serve.view"],
     ["lead", "lead.view"],
@@ -146,6 +167,24 @@ export const router = createBrowserRouter([
           { path: "journey/:connectId?", element: page("connect.journey.view", <JourneyPage />, "connect") },
           { path: "board", element: page("connect.phaseBoard.view", <PhaseBoardPage />, "connect") },
           { path: "metrics", element: page("connect.metrics.view", <MetricsPage />, "connect") },
+        ],
+      },
+      {
+        path: "grow",
+        children: [
+          { index: true, element: page("grow.view", <GrowIndex />) },
+          { path: "classes", element: page("learn.view", <ClassesPage />) },
+          { path: "classes/new", element: page("learn.manage", <ClassFormPage />) },
+          { path: "classes/:id", element: page("learn.view", <ClassPage />) },
+          { path: "classes/:id/edit", element: page("learn.manage", <ClassFormPage />) },
+          { path: "classes/:id/sessions/new", element: page("learn.author", <SessionEditorPage />) },
+          { path: "classes/:id/sessions/:sid", element: page("learn.view", <SessionDetailPage />) },
+          { path: "classes/:id/sessions/:sid/edit", element: page("learn.view", <SessionEditorPage />) },
+          { path: "classes/:id/sessions/:sid/attendance", element: page("learn.view", <AttendancePage />) },
+          { path: "classes/:id/assessments/new", element: page("learn.author", <AssessmentBuilderPage />) },
+          { path: "classes/:id/assessments/:aid", element: page("learn.view", <AssessmentBuilderPage />) },
+          { path: "classes/:id/assessments/:aid/submissions", element: page("learn.view", <SubmissionsPage />) },
+          { path: "classes/:id/assessments/:aid/submissions/:subId", element: page("learn.view", <ReviewPage />) },
         ],
       },
       ...laterRoutes,

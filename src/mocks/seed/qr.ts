@@ -32,11 +32,6 @@ export type QrRecord = {
 export type QrScanRow = { codeId: string; date: string; serviceId: string | null; inactive: boolean; n: number };
 
 /** Courses a code can open. Placeholders until Grow (M8) brings the real catalogue. */
-export const COURSES = [
-  { id: "crs-1", name: "Foundation Class", hint: "4 weeks" },
-  { id: "crs-2", name: "Baptism Class", hint: "1 session" },
-  { id: "crs-3", name: "School of Ministry", hint: "12 weeks" },
-];
 
 const DAY = 86_400_000;
 const ago = (days: number, now: number) => new Date(now - days * DAY).toISOString();
@@ -123,15 +118,15 @@ export function seedQr(now = Date.now()) {
     {
       ...base,
       id: "qr-6",
-      slug: "FNDCLS",
-      name: "Foundation Class sign-up",
+      slug: "NBCLSS",
+      name: "New Believers Class sign-up",
       destination: "course",
-      targetId: "crs-1",
+      targetId: "c-nb",
       activeFrom: at(-35, "08:00", now),
       expiresAt: null,
       state: "paused",
       note: "Paused while the next class date is fixed.",
-      caption: "Scan to join the Foundation Class",
+      caption: "Scan to join the New Believers Class",
       createdAt: ago(36, now),
       updatedAt: ago(4, now),
       updatedById: "u08",

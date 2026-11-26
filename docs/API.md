@@ -828,7 +828,7 @@ Legacy codes (QR-7) have no slug. Their printed address is today the church webs
 | `short_form` | `/welcome?form=short` |
 | `plan_visit` | `/plan-a-visit` |
 | `event` | `/events/{serviceId}` (a special event from §8) |
-| `course` | `/learn/courses/{courseId}` (a placeholder list until Grow, M8) |
+| `course` | `/learn/courses/{courseId}`: the published Grow classes (§13) |
 | `prayer_wall` | `/prayer` |
 
 ### `GET /welcome/qr-codes`
@@ -849,7 +849,7 @@ Legacy codes (QR-7) have no slug. Their printed address is today the church webs
   }],
   "counts": { "active": 2, "scheduled": 2, "paused": 1, "draft": 1, "expired": 1 },
   "targets": { "event": [{ "id": "svc-5", "name": "168 Hours of Praise", "hint": "2027-01-03 to 2027-01-09" }],
-               "course": [{ "id": "crs-1", "name": "Foundation Class", "hint": "4 weeks" }] },
+               "course": [{ "id": "c-nb", "name": "New Believers Class", "hint": "Sundays · 9:30 am · Online" }] },
   "services": [{ "id": "svc-1", "name": "Sunday 1st Service" }],
   "can": { "manage": true, "print": true }
 }
@@ -975,7 +975,6 @@ The screen warns when one square of a code would print smaller than 0.75 mm, and
 - The domains for the short address and the portal.
 - The address on today's printed code (seeded as a placeholder).
 - Whether Tech Team should see QR codes.
-- The course list, which comes with Grow (M8).
 
 ---
 
@@ -1377,3 +1376,480 @@ Body `{ "format": "pdf" | "csv", "period", "type" }`. The screen calls it **befo
 - **Sender** and reply-to address for report emails.
 - **PDF attachments.** Should they be allowed, or links only? Links keep the numbers behind sign-in.
 - **Reconciliation.** The Power BI figures each hub report must match before Power BI is turned off (8.2).
+
+---
+
+## 13. Grow: classes, sessions and rosters (M8 step 1)
+
+PRD LMS-1 to LMS-8, WEB-9 to WEB-11, WEB-13, WEB-17, RG-1, RG-4 and access rule §2.3.
+
+Figma Grow screens:
+- `135:20362`: dashboard
+- `135:20953`: classes
+- `135:22921`: create a class
+- `135:21567` and `136:29273`: class page
+- `135:22208`: session
+
+Screens:
+- Grow › Dashboard: `/grow`
+- Grow › Classes: `/grow/classes`
+- One class: `/grow/classes/{id}`, with tabs Sessions, Roster and Resources
+- The class form: `/grow/classes/new` and `/grow/classes/{id}/edit`
+- The session editor: `/grow/classes/{id}/sessions/{sessionId|new}`
+
+The mock is `src/mocks/grow-api.ts`, with its tests in `src/mocks/grow-api.test.ts`.
+
+The screens say **class**; the API says **course**. A class is one cohort, such as "Growth Class (Cohort 2026-B)"; the next cohort is a new course.
+
+### Who
+
+| Key | Who | Lets them |
+|---|---|---|
+| `learn.view` | Tech Admin, Tech Team, Church Admin, Registrar, Course Author, Grader | Grow dashboard and classes |
+| `learn.all` | Tech Admin, Tech Team, Church Admin, Registrar | See every class. Without it, only the classes they teach or grade (PRD U12) |
+| `learn.manage` | Tech Admin, Registrar | Create, change, publish, archive and delete classes; registration; rosters and waitlists |
+| `learn.author` | Tech Admin, Registrar, Course Author | Sessions, uploads and resources. A Course Author only for the classes they **teach** |
+| `learn.export` | Tech Admin, Church Admin, Registrar | Export rosters (logged) |
+
+- **Teachers are Course Authors** assigned to the class (TKP, 2026-11-25). They can also mark it (step 3), but never their own work.
+- Church Admin views and exports, never edits (PRD §2 rule 3).
+- A class someone can't see answers **404**, not 403: hidden means hidden.
+- Members keep `grow.view`. It shows the learner side's "coming" page until the member portal is built.
+
+### Rules we added where the PRD is silent
+
+Grow follows the **Figma Grow flow** (TKP, 2026-11-26): pastoral classes, attendance, reflection assessments reviewed by a pastor, and certificates. It doesn't follow the PRD's exam engine, so there are no timers, attempts or appeals. Where the Figma is silent, we filled the gaps. Each choice:
+
+1. **Status comes from the dates.** The stored `state` is `draft`, `published` or `archived`. The `status` the API returns adds:
+   - `open`: published, before the first meeting;
+   - `in_session`: from the first meeting to the end of the last;
+   - `completed`: after the last meeting.
+
+   Self-paced classes stay `open`.
+2. **Creating makes a draft** with one blank session per meeting, dated weekly from the first session. The class page publishes it.
+3. **Publish checks for a class** (RG-1):
+   - a teacher;
+   - for meeting classes: the day, time and start date, plus the place when it meets in person;
+   - at least one session;
+   - session 1 has content;
+   - the attendance rule fits the session count.
+4. **A session is empty** when it has no video, handout, summary or takeaway.
+   - An empty session can't be published, and a published one can't be emptied.
+   - A live online session also needs its time and join link before it can be published.
+5. **Publishing a class doesn't publish its sessions.** People see published sessions only, so content can be added week by week. In Figma, session 6 is still a draft while the class is in session.
+6. **Changing a session people have opened** (RG-1: "edits to live courses apply to new lessons unless confirmed"). The save must include `applyTo`:
+   - `"new"`: people who haven't opened it get the new version; the rest keep theirs.
+   - `"everyone"`: everyone gets the new version.
+
+   Without it the answer is `422 APPLY_TO_REQUIRED`. Each such change raises `version`.
+7. **Prerequisites are pathway steps,** not one class (LMS-3), because each class is a new cohort. The Registrar can let someone in without them by giving a reason of 5 characters or more. The reason is kept on the enrolment and in the audit log.
+8. **Members-only classes** turn away External Students with `422 MEMBERS_ONLY` (PRD S-2).
+9. **Automatic waitlist.**
+   - When a seat frees up (someone leaves, or the seats go up), the first in line gets it. This is audited as `learn.enrol.promote` with `automatic: true`.
+   - While seats are free, the Registrar can also seat someone out of turn.
+   - Seats can't go below the number of people already enrolled.
+10. **Changing the schedule** moves only the sessions that haven't met yet.
+    - Once a class has started, its start date is fixed.
+    - After publishing, the format can't switch between meeting and self-paced.
+11. **Archive and delete.**
+    - Archive is for finished classes, or open classes nobody has joined. A class in session is refused with `422 IN_USE`.
+    - Delete is only for drafts nobody has joined.
+12. **Leaving needs a reason.** The enrolment stays as `withdrawn`, and someone who left can be added again.
+13. **Terms** run January–April (Spring), May–August (Summer) and September–December (Autumn). The dashboard shows the week of the term.
+
+### `GET /learn/overview`
+
+```json
+{
+  "term": { "label": "Autumn 2026 term", "week": 13 },
+  "tiles": { "enrolled": 174, "waitlisted": 3, "running": 2, "sessionsThisWeek": 2 },
+  "attention": [{ "id": "unpub-…", "kind": "unpublished", "title": "…", "detail": "…", "courseId": "c-growth", "action": "Add content" }],
+  "week": [{ "courseId": "c-growth", "sessionId": "c-growth-s6", "title": "Growth Class (Cohort 2026-B)", "sessionTitle": "6. Covenant Community and Commissioning",
+             "at": "2026-11-29T17:45:00.000Z", "where": "Live online", "enrolled": 54, "teachers": ["Doyin Olusanya"] }],
+  "can": { "manage": true }
+}
+```
+
+It covers only the classes the person may see.
+- **Attention** (`kind`: `draft`, `unpublished` or `full`) lists:
+  - draft classes;
+  - sessions meeting in the next 7 days that aren't published;
+  - full classes with people waiting.
+- **Week** lists the live sessions in the next 7 days.
+
+### Classes
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `GET /learn/courses` | `{ items: CourseSummary[], scope: "all" or "assigned", can: { manage }, options: { teachers, graders } }` | |
+| `POST /learn/courses` | `CourseInput` → 201 `{ course }`, a draft | `learn.course.create` |
+| `GET /learn/courses/{id}` | `CourseDetail`, with `sessions`, `checks`, `progress`, `resources`, `can: { manage, author, export }` | |
+| `PUT /learn/courses/{id}` | `CourseInput` + `rowVer` → `{ course, moved, promoted: [names] }`. 409 if stale | `learn.course.update` (changed fields only) |
+| `POST /learn/courses/{id}/publish` | `{ rowVer }`. `422 PUBLISH_CHECKS` lists what's missing | `learn.course.publish` |
+| `POST /learn/courses/{id}/registration` | `{ open, rowVer }`, published classes only | `learn.registration.open` / `.close` |
+| `POST /learn/courses/{id}/archive` | `{ rowVer }` | `learn.course.archive` |
+| `DELETE /learn/courses/{id}` | Drafts nobody has joined | `learn.course.delete` |
+
+**`CourseInput`:**
+
+| Field | Rule |
+|---|---|
+| `title` | 3–80 characters, unique among classes that aren't archived |
+| `description` | Up to 500 characters |
+| `step` | 1–7, or null |
+| `format` | `live`, `recorded`, `reading` or `mixed` |
+| `audience` | `everyone` or `members` |
+| `prerequisiteSteps` | Pathway steps, each earlier than `step` |
+| `teacherIds` | At least one active Course Author |
+| `graderIds` | Graders or Course Authors |
+| `schedule.day` | 0 = Sunday |
+| `schedule.time` | "HH:MM", church time |
+| `schedule.where` | `online` or `in_person` |
+| `schedule.place` | Where an in-person class meets |
+| `schedule.startsOn` | Falls on `schedule.day`; null while the term isn't set |
+| `schedule.sessionCount` | 1–52 |
+| `schedule.lengthMin` | 15–480 |
+| `seats` | 1–1000, or null for no limit |
+| `waitlist` | true or false |
+| `completion.attendance` | Up to `sessionCount` |
+| `completion.assessment` | `none`, `final` or `every` |
+| `welcomeNote` | Up to 1,000 characters |
+
+For self-paced formats, `day`, `time` and `startsOn` are null.
+
+**Field errors** use dotted keys, such as `schedule.day`, `schedule.startsOn` and `completion.attendance`.
+
+### Sessions
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `POST /learn/courses/{id}/sessions` | `SessionInput` → 201 `{ session, course }`: a draft at position `number`; the rest move along | `learn.session.create` |
+| `PUT /learn/sessions/{id}` | `SessionInput` + `rowVer`, plus `applyTo` (rule 6) | `learn.session.update`, with `applyTo` and `version` |
+| `POST /learn/sessions/{id}/publish` | `{ rowVer }`. `422 PUBLISH_CHECKS` lists what's missing | `learn.session.publish` |
+| `POST /learn/sessions/{id}/unpublish` | `{ rowVer }`, only while nobody has opened it | `learn.session.unpublish` |
+| `DELETE /learn/sessions/{id}` | Drafts only, never the last session. The rest move up | `learn.session.delete` |
+
+**`SessionInput`:**
+
+| Field | Rule |
+|---|---|
+| `title` | 2–100 characters |
+| `number` | Position in the class, 1-based |
+| `kind` | `live`, `recorded` or `reading` |
+| `startsAt` | ISO; live sessions only |
+| `joinUrl` | https; live online sessions only |
+| `durationMin` | 1–600, optional |
+| `speaker` | Up to 80 characters |
+| `summary` | Up to 1,000 characters |
+| `video` | `{ kind: "file", file: Upload }`, `{ kind: "link", url }` with a YouTube or Vimeo link, or null |
+| `scripture` | Up to 120 characters |
+| `handouts` | Up to 10 uploads |
+| `takeaways` | Up to 5, each up to 200 characters |
+
+A `Session` adds `{ id, courseId, state, publishedAt, opened, version, empty, rowVer }`. `opened` counts the people still on the class who have opened it.
+
+**Join link** (LMS-6): the learner side shows it 15 minutes before `startsAt`. The backend sends the reminders.
+
+### Uploads and resources
+
+**`POST /learn/uploads`** takes multipart `purpose` and `file`, and returns 201 `{ file: { id, name, size, type } }`.
+
+| `purpose` | Allowed |
+|---|---|
+| `video` | MP4, MOV or M4V, up to 2 GB |
+| `handout` | PDF, up to 25 MB |
+| `resource` | PDF, Word, Excel or PowerPoint, up to 25 MB |
+
+Anything else is a 422 with `fields.file`.
+
+**Backend:**
+- Store uploads in object storage.
+- **Virus-scan each file before it can be published** (PRD 4.4).
+- Serve files through short-lived links, only to people on the class.
+- Large videos should upload directly to storage with a signed URL. The API contract stays the same.
+
+**Class resources:** `POST /learn/courses/{id}/resources` with `{ file }` (up to 20 per class), and `DELETE /learn/courses/{id}/resources/{fileId}`. Audited as `learn.resource.add` and `learn.resource.remove`.
+
+### Rosters and registration controls
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `GET /learn/courses/{id}/roster` | `{ courseId, title, seats, publishedSessions, items: Enrolment[], can: { manage, export } }` | |
+| `GET /learn/courses/{id}/people?q=` | Up to 12 people, by name or email: `{ id, name, email, learner, enrolled, missing }`. `missing` lists the pathway steps they haven't finished | |
+| `POST /learn/courses/{id}/roster` | `{ personId, waive }` → 201 `{ enrolment }`: enrolled, or waitlisted when the class is full | `learn.enrol.add` / `.waitlist` |
+| `POST /learn/enrolments/{id}/withdraw` | `{ reason }` → `{ enrolment, promoted }` | `learn.enrol.withdraw` |
+| `POST /learn/enrolments/{id}/promote` | Gives a waiting person a seat now. `422 FULL` if no seat is free | `learn.enrol.promote` |
+| `POST /learn/courses/{id}/roster/export` | Called **before** the CSV downloads | `learn.roster.export` (category: exports) |
+
+**`Enrolment`:**
+
+| Field | Meaning |
+|---|---|
+| `id`, `personId`, `name`, `email` | Who |
+| `learner` | An External Student |
+| `status` | `enrolled`, `waitlisted`, `withdrawn` or `completed` |
+| `enrolledAt` | When they joined |
+| `position` | Place on the waitlist |
+| `opened` | Published sessions they have opened |
+| `waived` | The reason a prerequisite was waived |
+| `withdrawnReason` | Why they left |
+
+**Errors:**
+
+| Code | When |
+|---|---|
+| `ALREADY_ENROLLED` | They're already on the class |
+| `MEMBERS_ONLY` | An External Student, for a members-only class |
+| `PREREQUISITE` | A pathway step isn't finished and no reason was given (`fields.waive`) |
+| `FULL` | No seat is free and there's no waitlist |
+| `CLOSED` | The class has finished |
+
+**Audit log:** a new "Grow" filter. The target shows the class name.
+
+**QR codes:** codes that open a course (§9) now list the published classes.
+
+### Mock data
+
+Seven classes on the pathway, dated from today:
+
+| Class | State |
+|---|---|
+| Growth Class | In session; session 6 is still a draft |
+| New Believers | In session; session 5 is ready but not published |
+| Doctrinal Foundations | Opens in two weeks; full, with 3 people waiting |
+| School of Disciples | Starts next week |
+| Water Baptism | Finished |
+| School of Ministry | A draft, for January |
+| A prayer class | Self-paced |
+
+There are 180 fictional people. About one in seven is an External Student.
+
+Demo accounts:
+- **Registrar:** Tolu Ajayi
+- **Course Authors (teachers):** Doyin Olusanya, Folabi Adewale, Ayo Oladipo, Olusegun Ogunleye, Esther Oyelaran
+- **Grader:** Kemi Adebayo
+
+**Next in M8:**
+- step 2: attendance and the assessment builder (§14, built);
+- step 3: grading (§15, built);
+- step 4: certificates and the drop-off report;
+- step 5: the cohort forum.
+
+**Open questions:**
+- **Terms.** Does TKP name its terms Spring, Summer and Autumn, starting in January, May and September?
+- **Pathway.** Are the seven steps and their order right?
+- **External Students.** Which classes may they join? We assumed every class that isn't members-only.
+
+---
+
+## 14. Grow: attendance, session page and assessments (M8 step 2)
+
+This step follows the Figma Grow flow (TKP, 2026-11-26).
+
+Figma screens:
+- `135:24429`: Mark attendance
+- `136:26483`: Session detail
+- `135:23449` and `135:24058`: Assessment builder
+
+Screens:
+- Session page: `/grow/classes/{id}/sessions/{sessionId}`. The session editor moved to `…/edit`.
+- Attendance: `…/sessions/{sessionId}/attendance`
+- The class page's **Assessments** tab
+- The builder: `/grow/classes/{id}/assessments/new?after={n}` and `/grow/classes/{id}/assessments/{assessmentId}`
+
+The mock is `src/mocks/grow-teaching.ts`, with its tests in `src/mocks/grow-teaching.test.ts`.
+
+**Who.** Class teachers (Course Authors) and the Registrar mark attendance and build assessments. Graders and Church Admin can see both, but can't change them. A class someone can't see answers 404.
+
+### Attendance
+
+Each person on the class gets **Joined**, **Recording** or **Missed**. Joined and Recording both count as attended, for the completion rule `completion.attendance`.
+
+Rules we added where the Figma is silent:
+
+1. **Suggested marks from the join log.** The meeting platform's join log and the video player's watch log give a suggestion for each person:
+   - any live join suggests Joined;
+   - watching at least 80% of the recording suggests Recording;
+   - anything else suggests Missed.
+
+   A first sheet starts from these suggestions. "Reset to join logs" puts them back, and "Mark all joined" sets everyone to Joined. A live join shorter than half the session carries a note ("Joined for only 10 of 60 minutes …"), as in the Figma.
+2. **Saving.** "Save and come back later" saves part-way (`state: "draft"`). **"Save attendance"** needs everyone marked (`state: "saved"`).
+3. **Grace period: 7 days after the session ends.** The Figma says "Members marked 'Missed' have 7 days to watch the class stream." Within that time, someone saved as Missed who watches at least 80% of the recording **counts automatically**, without anyone changing the mark. The sheet shows `auto: true` for them.
+4. **After the grace period** the marks lock. Only the Registrar can change them, and must give a reason of 5 characters or more, which is audited.
+5. Attendance opens when a live session **starts**. Recorded sessions have none.
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `GET /learn/sessions/{id}/attendance` | `AttendanceSheet`. `422 NOT_STARTED` before the session starts | |
+| `PUT /learn/sessions/{id}/attendance` | `{ marks: { [enrolmentId]: "joined" \| "recording" \| "missed" \| null }, final, rowVer, reason }`. `rowVer` is 0 for a first save. Returns the sheet | `learn.attendance.draft` / `learn.attendance.save`: counts before and after, how many changed, and the reason when locked |
+
+**`AttendanceSheet`:** `{ sessionId, courseId, courseTitle, sessionTitle, number, startsAt, lengthMin, state: "not_started" | "draft" | "saved", savedAt, savedBy, graceEndsAt, locked, rows, can: { edit, override }, rowVer }`.
+
+Each row is `{ enrolmentId, name, mark, suggested, log, flag, auto }`. Examples of `log`: "Joined 11:44 am · full duration (60 min)", "Watched the recording Nov 23 (100% completed)", "No log detected".
+
+**Errors:**
+
+| Code | When |
+|---|---|
+| `VALIDATION_FAILED` | A final save with people unmarked ("44 people aren't marked yet") |
+| `LOCKED` | A teacher, after the grace period |
+| `VALIDATION_FAILED` with `fields.reason` | The Registrar, after the grace period, with no reason |
+| `CONFLICT` | Someone else saved since this sheet was loaded |
+
+**Elsewhere:**
+- Session rows on the class page show "N% attended" or "Attendance not marked".
+- The roster gains `attended` (sessions marked Joined or Recording).
+- The dashboard lists every session that has met, isn't saved and is still in its grace period. The item's `to` goes straight to the sheet.
+- The dashboard tile **"Joined live"** counts live joins in the last 7 days. It replaces "Sessions this week", as in the Figma.
+
+**Backend:** pull the join log from the meeting platform (Zoom or similar) after each session, and the watch log from the video player. Join each log row to a person by their TKP Hub account; the join link is personal per enrolment for this reason.
+
+### Session page: `GET /learn/sessions/{id}`
+
+`{ session, course: { id, title, status, teachers, enrolled, format, where, lengthMin }, stats, attendance, assessments, can: { author, attendance } }`
+
+- **`stats`:** `{ attendanceRate, attended, marked, submissions, expected, videoWatch }`.
+  - `submissions` is null when no published assessment opens after this session.
+  - `videoWatch` is the average percentage watched by people who watched the recording.
+- **`attendance`:** `{ state, savedAt, savedBy, due }`, or null when the session takes no attendance.
+- **`assessments`:** the assessments that open after this session, as `{ id, title, status }`.
+
+The Figma's "Forum activity" card arrives with the forum (step 5), and "View submissions" with review (step 3).
+
+### Assessments
+
+Response types, from the Figma:
+
+| `kind` | Shown as | Response |
+|---|---|---|
+| `short` | Short reflection | Short answer; members respond with 2–4 sentences |
+| `choice` | Multiple choice | 2–8 options |
+| `scale` | Spiritual check-in | 1–5: Struggling, Okay, Steady, Growing, Thriving |
+
+Each question has `{ id, kind, prompt, required, options }`.
+
+**`AssessmentInput`:**
+
+| Field | Rule |
+|---|---|
+| `title` | 3–100 characters |
+| `afterSession` | The 1-based session it opens after |
+| `windowDays` | 3, 7, 14, 21 or 28 |
+| `final` | true or false |
+| `questions` | Up to 20 |
+
+The Figma chip "Recommended: 3–5 items" is guidance only.
+
+Rules we added where the Figma is silent:
+
+1. **When it opens.** For a class that meets, it opens when its session **ends** and closes `windowDays` later. For a self-paced class it opens as each person finishes that session. If the session moves, the assessment moves with it.
+2. **Status:** `draft`, then `scheduled` (published, not yet open), then `open`, then `closed`.
+3. **Two-step builder.** Step 1 is the Figma form. Step 2 previews the assessment as members will see it, with the dates and who receives it, then publishes.
+4. **Drafts can be incomplete.** Publishing needs:
+   - a title;
+   - at least one question;
+   - every prompt filled in;
+   - multiple-choice questions with at least two options, none empty and none repeated;
+   - at least one required question;
+   - a session with a date, for classes that meet.
+
+   `problems` lists what is missing.
+5. **Once it opens, the questions and the session are fixed.** Only the window (and the title) can change, and the window can't close it in the past. Changing the questions gives `422 QUESTIONS_LOCKED`.
+6. **One final assessment per class.** Marking another one final moves the flag. The answer names the assessment that lost it in `movedFinal`.
+7. **Undoing publication.** A scheduled assessment can go back to draft. An open one can't. Only drafts can be deleted.
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `POST /learn/courses/{id}/assessments` | `AssessmentInput` → 201 `{ assessment, movedFinal }`, a draft | `learn.assessment.create` |
+| `GET /learn/assessments/{id}` | `Assessment` | |
+| `PUT /learn/assessments/{id}` | `AssessmentInput` + `rowVer` → `{ assessment, movedFinal }` | `learn.assessment.update` |
+| `POST /learn/assessments/{id}/publish` · `/unpublish` | `{ rowVer }` | `learn.assessment.publish` / `.unpublish` |
+| `DELETE /learn/assessments/{id}` | Drafts only | `learn.assessment.delete` |
+
+An **`Assessment`** adds `{ id, courseId, courseTitle, status, opensAt, closesAt, publishedAt, createdBy, submissions, problems, questionsLocked, can: { edit }, rowVer }`. `CourseDetail.assessments` lists the class's assessments.
+
+**Mock data:**
+- Growth Class has an open "Session 5 reflection" and the scheduled final "Class Reflection" (the Figma example).
+- Doctrinal Foundations has an unfinished draft.
+- Join logs and saved attendance exist for every session that has met, except the newest session of each class still running.
+
+**Open questions:**
+- **Meeting platform.** Which one does TKP use (Zoom?), and can its join log be read automatically?
+- **Recording.** Is 80% of the recording the right bar for "watched"?
+- **Grace period.** Should it be 7 days for every class?
+
+---
+
+## 15. Grow: the pastor's review (M8 step 3)
+
+This step follows the Figma Grow flow (TKP, 2026-11-26).
+
+Figma screens:
+- `135:25044`: Assessment Submission (the list)
+- `136:27588`: Assessment Review (one person)
+
+Screens:
+- `/grow/classes/{id}/assessments/{assessmentId}/submissions`
+- `…/submissions/{submissionId}`
+
+They open from the dashboard, the assessment ("Review answers"), the session page ("View submissions") and the class's Assessments tab. The mock is `src/mocks/grow-review.ts`, with its tests in `src/mocks/grow-review.test.ts`.
+
+**Who reviews:** the class's teachers, its assigned graders and the Registrar. Church Admin and Tech Team can read only.
+
+### The list: `GET /learn/assessments/{id}/submissions`
+
+`{ assessment, counts: { all, review, returned, pending, excused }, items, pending, lastReminder, can: { review, remind, excuse } }`
+
+- **`items`:** submissions, those waiting for review first. Each is `{ id, enrolmentId, name, submittedAt, state, outcome, reviewer, preview }`, where `state` is `submitted`, `in_review` (saved for later) or `returned`, and `preview` is the start of their first short answer.
+- **`pending`:** people on the class who haven't answered, as `{ enrolmentId, name, attended, sessions, watched, excused }`. `watched` is the best share of the session's recording they've watched.
+- **Filters** follow the Figma: Not submitted, All submissions, Needs pastoral review, Approved and returned. Search covers names and answers. The list sorts oldest first, newest first or by name.
+
+### One submission: `GET /learn/submissions/{id}`
+
+`{ id, assessment: { id, title, courseId, courseTitle, questions }, name, firstName, submittedAt, attended, sessions, answers, state, outcome, note, shareNote, reviewer, returnedAt, history, queue: { prev, next, left }, can: { review, blocked }, rowVer }`
+
+- **`answers`** are keyed by question id:
+  - short: the text;
+  - multiple choice: the option index;
+  - check-in: 1–5.
+- **`queue`** steps through the answers still waiting for review. After returning one, the screen opens the next.
+
+### Review: `PUT /learn/submissions/{id}/review`
+
+`{ outcome, note, shareNote, release, rowVer, reason }`, returning the submission.
+
+Rules we added where the Figma is silent:
+
+1. **Outcomes** (the Figma's "Passed: well done", plus two more):
+
+   | `outcome` | Shown as | Effect |
+   |---|---|---|
+   | `passed` | Passed: well done | Counts for the certificate |
+   | `follow_up` | Let's talk: a pastor will follow up | A pastor follows up |
+   | `resubmit` | Try again: reopen it for them | Their answers open again until the assessment closes |
+
+   Anything but Passed needs a note of 10 characters or more, with "Share my note" on, so they know what to do next.
+2. **Saving and returning.** "Save for later" (`release: false`) saves a draft review (`in_review`). "Return to {name}" (`release: true`) needs an outcome. They then see the outcome, and the note if it's shared.
+3. **Changing a returned review** (PRD RG-2, "score change log") needs a reason of 5 characters or more. The change is kept in `history` and audited as `learn.review.change` with the outcome before and after. A returned review can't go back to "saved for later".
+4. **No self-review** (PRD RG-2, "self-grading block"). If the learner's email is the reviewer's, the answer is `403 SELF_REVIEW` and someone else reviews it.
+5. `409 CONFLICT` if someone else reviewed it first.
+
+Audit: `learn.review.save`, `learn.review.return` and `learn.review.change`, each with the person, the outcome and whether the note was shared.
+
+### Reminders and excusing
+
+- **`POST /learn/assessments/{id}/remind`:** the Figma's "Send gentle reminder email". It goes to everyone who hasn't answered and isn't excused, only while the assessment is open (`422 NOT_OPEN`), and at most **once a day** per assessment (`422 TOO_SOON`). Returns `{ sent }`. Audited as `learn.review.remind`.
+- **`PUT /learn/assessments/{id}/excused/{enrolmentId}`** with `{ reason }`, and **`DELETE`** to take it back. This is the Figma's "Excused: Out of state travel". Excused people get no reminders, and the assessment doesn't hold back their certificate (step 4). Someone who has already answered can't be excused (`422 ANSWERED`). Audited as `learn.review.excuse` and `learn.review.unexcuse`.
+
+**Dashboard:** "{class}: N answers need your review" goes to people who can review that class.
+
+**Mock data:** Growth Class's "Session 5 reflection" has:
+- 8 answers waiting for review;
+- the rest returned by Pastor Doyin, a few of them "Let's talk";
+- several people who haven't answered, one of them excused for travel.
+
+**Backend:** the learner app sends answers to an endpoint of its own (out of scope here). Emails use the church's sender (still open, §12).
+
+**Open questions:**
+- **Outcomes.** Are Passed, Let's talk and Try again the right three?
+- **Notes.** Should notes always be shared, or stay optional as in the Figma?

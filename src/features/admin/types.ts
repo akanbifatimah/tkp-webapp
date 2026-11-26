@@ -60,7 +60,7 @@ export type AuditEntry = {
   meta: { before?: Record<string, unknown>; after?: Record<string, unknown> } | null;
 };
 
-export type AuditCategory = "sign-in" | "welcome" | "connect" | "users" | "settings" | "exports";
+export type AuditCategory = "sign-in" | "welcome" | "connect" | "grow" | "users" | "settings" | "exports";
 
 export type AuditQuery = {
   q?: string;

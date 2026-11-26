@@ -233,6 +233,7 @@ export const AUDIT_CATEGORY: Record<AuditCategory, (action: string) => boolean> 
   "sign-in": (a) => a.startsWith("sign_") || a.startsWith("password.") || a.startsWith("mfa."),
   welcome: (a) => a.startsWith("welcome.") && !a.endsWith(".export"),
   connect: (a) => a.startsWith("connect."),
+  grow: (a) => a.startsWith("learn.") && !a.endsWith(".export"),
   users: (a) => a.startsWith("user."),
   settings: (a) => a.startsWith("settings."),
   exports: (a) => a.endsWith(".export") || a === "welcome.qr.print" || a === "reports.share" || a === "reports.schedule.run",
@@ -260,6 +261,10 @@ function targetLabel(r: AuditRow): string | null {
   if (r.action === "welcome.service.reorder") return "Guest form services";
   if (r.action.startsWith("welcome.service.")) {
     const name = db.services.find((s) => s.id === r.target)?.name ?? (r.meta?.before?.name as string | undefined) ?? (r.meta?.after?.name as string | undefined);
+    return name ?? r.target;
+  }
+  if (r.action.startsWith("learn.")) {
+    const name = db.learnCourses.find((c) => c.id === r.target)?.title ?? (r.meta?.before?.title as string | undefined) ?? (r.meta?.after?.title as string | undefined);
     return name ?? r.target;
   }
   if (r.action.startsWith("welcome.qr.")) {

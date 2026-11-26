@@ -40,7 +40,7 @@ describe("users: who may manage them", () => {
     const tmp = listUsers(user(TECH), { status: "temporary" });
     expect(tmp.ok && tmp.body.items.some((u) => u.id === "u17")).toBe(true);
     const role = listUsers(user(TECH), { role: "registrar" });
-    expect(role.ok && role.body.items.map((u) => u.id)).toEqual(["u14"]);
+    expect(role.ok && role.body.items.map((u) => u.id).sort()).toEqual(["u14", "u23"]);
     const page = listUsers(user(TECH), { pageSize: 5, page: 2 });
     expect(page.ok && page.body.items.length).toBe(5);
     expect(page.ok && page.body.page).toBe(2);

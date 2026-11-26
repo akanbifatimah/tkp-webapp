@@ -16,7 +16,8 @@ import { can, type Permission } from "@/lib/permissions";
 import { CHURCH_TZ, churchDate, formatWhen, fromChurchLocal, toChurchLocal } from "@/lib/time";
 import type { Result } from "./connect-api";
 import { audit, db } from "./db";
-import { COURSES, type QrRecord } from "./seed/qr";
+import { qrCourseTargets } from "./grow-api";
+import type { QrRecord } from "./seed/qr";
 import type { ServiceRecord } from "./seed/services";
 import type { StaffRecord } from "./seed/staff";
 
@@ -65,7 +66,7 @@ const eventTargets = () =>
 
 function destinationOf(c: Pick<QrRecord, "destination" | "targetId" | "serviceId">) {
   const target =
-    c.destination === "event" ? findService(c.targetId)?.name : c.destination === "course" ? COURSES.find((x) => x.id === c.targetId)?.name : null;
+    c.destination === "event" ? findService(c.targetId)?.name : c.destination === "course" ? db.learnCourses.find((x) => x.id === c.targetId)?.title : null;
   const label = target ? `${DESTINATION_LABEL[c.destination]} · ${target}` : DESTINATION_LABEL[c.destination];
   const svc = c.serviceId ? `service=${c.serviceId}` : "";
   const url: Record<DestinationType, string> = {
@@ -183,7 +184,7 @@ export function listQr(u: StaffRecord, now = new Date()): Result<QrListResponse>
   return ok({
     items,
     counts,
-    targets: { event: eventTargets(), course: COURSES },
+    targets: { event: eventTargets(), course: qrCourseTargets() },
     services: db.services.filter((s) => s.active).sort((a, b) => a.sortOrder - b.sortOrder).map((s) => ({ id: s.id, name: s.name })),
     can: { manage: allowed(u, "qr.manage"), print: allowed(u, "qr.print") },
   });
@@ -252,7 +253,7 @@ function validate(input: Partial<QrInput>, self: QrRecord | null, creating: bool
     if (!s || s.kind !== "special") fields.targetId = ["Choose the event"];
     else targetId = s.id;
   } else if (destination === "course") {
-    if (!COURSES.some((x) => x.id === input.targetId)) fields.targetId = ["Choose the course"];
+    if (!qrCourseTargets().some((x) => x.id === input.targetId)) fields.targetId = ["Choose the course"];
     else targetId = input.targetId!;
   }
   const serviceId = input.serviceId ? (findService(input.serviceId)?.id ?? null) : null;

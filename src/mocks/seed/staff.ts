@@ -71,6 +71,14 @@ export const STAFF: StaffRecord[] = [
   s("u12", "Naomi Bello", ["welcome_team"], null),
   s("u13", "Caleb Johnson", ["tkp_member"], null),
   s("u14", "Deborah Alade", ["church_admin", "registrar"], null),
+  // Grow (M8): the Registrar, the class teachers (Course Authors) and a grader
+  s("u23", "Tolu Ajayi", ["registrar"], null),
+  s("u18", "Doyin Olusanya", ["course_author"], null),
+  s("u19", "Folabi Adewale", ["course_author"], null),
+  s("u20", "Ayo Oladipo", ["course_author", "grader"], null),
+  s("u21", "Olusegun Ogunleye", ["course_author"], null),
+  s("u22", "Esther Oyelaran", ["course_author"], null),
+  s("u24", "Kemi Adebayo", ["grader"], null),
   // A team role without a follow-up team (AC-04 message)
   s("u15", "Isaac Ward", ["integration_team"], null),
   // Signed in with a temporary password: must choose their own first (API-A7)

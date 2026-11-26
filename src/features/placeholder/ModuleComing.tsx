@@ -59,7 +59,7 @@ const later = (step: number, title: string, features: string[]): ComingSpec => (
 
 export const COMING_LATER: Record<string, ComingSpec> = {
   belong: later(3, "Belong", ["Small groups and the opt-in member directory", "Cell groups and rosters"]),
-  grow: later(4, "Grow", ["Registrar console, courses and exams", "Grading queue and certificates"]),
+  grow: later(4, "Grow", ["Class catalogue and enrolment for members and External Students", "Lessons, exams and your certificates (member portal)"]),
   care: later(5, "Care", ["Prayer Wall moderation", "Care team overview"]),
   serve: later(6, "Serve", ["Projects, positions and applicant review", "Events and 168 Hours of Praise"]),
   lead: later(7, "Lead", ["Leadership dashboards with totals only"]),
