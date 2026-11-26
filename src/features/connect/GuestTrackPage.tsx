@@ -28,7 +28,7 @@ export function GuestTrackPage() {
 
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
-      <PageHeader eyebrow="2 · Connect · Before and between visits" title="Guest Track" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
+      <PageHeader eyebrow="Connect · Before and between visits" title="Guest Track" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
       <DraftNotice questions="Q13">
         The stages follow the “when” notes on the three Guest Track scripts in the SOP library. Who sends each text, and whether “sent” should be recorded, are still to be agreed.
       </DraftNotice>

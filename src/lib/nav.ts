@@ -115,6 +115,8 @@ export const NAV: NavGroup[] = [
     tabs: [
       { label: "Dashboard", to: "/grow", permission: "learn.view", end: true },
       { label: "Classes", to: "/grow/classes", permission: "learn.view" },
+      { label: "Certificates", to: "/grow/certificates", permission: "learn.view" },
+      { label: "Drop-off report", to: "/grow/drop-off", permission: "learn.all" },
     ],
   },
   { id: "care", step: 5, label: "Care", icon: HeartHandshake, to: "/care", permission: "care.view", planned: true },

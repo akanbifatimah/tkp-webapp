@@ -62,7 +62,7 @@ export function LogPage() {
 
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
-      <PageHeader eyebrow="2 · Connect · During or right after the call" title="Log follow-up" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
+      <PageHeader eyebrow="Connect · During or right after the call" title="Log follow-up" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
 
       {id === null ? (
         <motion.div variants={fadeUp} className="rounded-3xl bg-white shadow-card">

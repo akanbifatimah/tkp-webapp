@@ -35,7 +35,7 @@ export function MetricsPage() {
 
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
-      <PageHeader eyebrow="2 · Connect · How the teams are doing" title="Team metrics" tagline={CONNECT_TAGLINE} />
+      <PageHeader eyebrow="Connect · How the teams are doing" title="Team metrics" tagline={CONNECT_TAGLINE} />
       <DraftNotice questions="Q10, Q11, Q12">
         Definitions follow doc 01 §8.2 and are not confirmed yet. KPI deadlines use Q10’s proposal: 48 hours for the welcome, the welcome call by day 3, culture and interests by the end of week 2. Every Connect role sees this page until Q12 is answered.
       </DraftNotice>

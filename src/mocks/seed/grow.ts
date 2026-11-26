@@ -36,6 +36,32 @@ export type LearnPerson = {
   learner: boolean;
   /** Pathway steps finished before (prerequisite checks, LMS-3). */
   completedSteps: number[];
+  /** When each finished step was started (the drop-off report). */
+  history: { step: number; at: string }[];
+};
+
+/** M8 step 4: issued certificates, kept for good (PRD LMS-9, "issued certificates retained as records"). */
+export type CertificateRecord = {
+  id: string;
+  serial: string;
+  personId: string;
+  enrolmentId: string | null;
+  /** As printed. A reissue can correct it. */
+  name: string;
+  courseId: string | null;
+  courseTitle: string;
+  step: number | null;
+  teacher: string | null;
+  pastor: string | null;
+  /** Copies taken when it was issued, so a later change of signature never alters it. Older ones have none. */
+  teacherSignature?: string | null;
+  pastorSignature?: string | null;
+  issuedAt: string;
+  issuedById: string | null;
+  status: "valid" | "replaced" | "revoked";
+  replaces: string | null;
+  replacedBy: string | null;
+  reason: string | null;
 };
 
 export type EnrolmentRecord = {
@@ -135,6 +161,7 @@ function seedPeople(): LearnPerson[] {
       // About one in seven learns with TKP without being a member.
       learner: i % 7 === 3,
       completedSteps: i < 30 ? [1] : steps,
+      history: [],
     });
   }
   return out;
@@ -474,7 +501,8 @@ export function seedGrow(now = Date.now()) {
   }
   const { logs, attendance } = seedAttendance(courses, sessions, enrolments, now);
   const assessments = seedAssessments(now);
-  return { people, courses, sessions, enrolments, logs, attendance, assessments, ...seedSubmissions(enrolments, sessions, now) };
+  for (const [i, p] of people.entries()) p.history = historyFor(p.completedSteps, i, now);
+  return { people, courses, sessions, enrolments, logs, attendance, assessments, ...seedSubmissions(enrolments, sessions, now), certificates: seedCertificates(people, courses, enrolments, attendance, now) };
 }
 
 /* ------------------------------------------------------------ attendance */
@@ -630,4 +658,54 @@ function seedSubmissions(enrolments: EnrolmentRecord[], sessions: SessionRecord[
   const missing = people.filter((e) => !submissions.some((x) => x.enrolmentId === e.id));
   const excusals: ExcusalRecord[] = missing[0] ? [{ assessmentId: "as-g5", enrolmentId: missing[0].id, reason: "Out of state travel", byId: "u18", at: new Date(now - DAY).toISOString() }] : [];
   return { submissions, excusals, reminders: [] as ReminderRecord[] };
+}
+
+/* ------------------------------------------------------ pathway history */
+
+/** Spread each person's finished steps over the last two years, a few weeks to months apart. */
+function historyFor(steps: number[], i: number, now: number) {
+  const sorted = [...steps].sort((a, b) => a - b);
+  let at = now - (20 + ((i * 13) % 200)) * DAY;
+  const out: { step: number; at: string }[] = [];
+  for (let k = sorted.length - 1; k >= 0; k--) {
+    out.unshift({ step: sorted[k]!, at: new Date(at).toISOString() });
+    at -= (40 + ((i * 11 + k * 17) % 90)) * DAY;
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------- certificates */
+
+const PASTOR = "Samuel Bankole";
+
+function seedCertificates(people: LearnPerson[], courses: CourseRecord[], enrolments: EnrolmentRecord[], attendance: AttendanceRecord[], now: number): CertificateRecord[] {
+  const out: CertificateRecord[] = [];
+  let n = 61;
+  const serial = (at: number) => `TKP-${new Date(at).getUTCFullYear()}-${String(n++).padStart(3, "0")}`;
+  // Earlier cohorts that are no longer in the class list.
+  const past: [number, string, number, string, number][] = [
+    [140, "New Believers Class (Cohort 2026-A)", 2, "Folabi Adewale", 120],
+    [141, "New Believers Class (Cohort 2026-A)", 2, "Folabi Adewale", 120],
+    [150, "Growth Class (Cohort 2026-A)", 4, "Doyin Olusanya", 95],
+    [151, "Growth Class (Cohort 2026-A)", 4, "Doyin Olusanya", 95],
+    [152, "Growth Class (Cohort 2026-A)", 4, "Doyin Olusanya", 95],
+    [160, "Doctrinal Foundations (Cohort 2026-A)", 5, "Ayo Oladipo", 70],
+  ];
+  for (const [pi, title, step, teacher, days] of past) {
+    const p = people[pi]!;
+    const at = now - days * DAY;
+    out.push({ id: `cert-${n}`, serial: serial(at), personId: p.id, enrolmentId: null, name: p.name, courseId: null, courseTitle: title, step, teacher, pastor: PASTOR, issuedAt: new Date(at).toISOString(), issuedById: "u23", status: "valid", replaces: null, replacedBy: null, reason: null });
+  }
+  // Water Baptism finished three weeks ago: most who came to both sessions already have theirs.
+  const wb = courses.find((c) => c.id === "c-wb")!;
+  const marks = attendance.filter((r) => r.sessionId.startsWith("c-wb-"));
+  const done = enrolments.filter((e) => e.courseId === "c-wb" && e.status === "enrolled" && marks.filter((r) => r.marks[e.id] && r.marks[e.id] !== "missed").length >= wb.completion.attendance);
+  done.forEach((e, i) => {
+    if (i % 3 === 2) return; // still waiting for the Registrar
+    const p = people.find((x) => x.id === e.personId)!;
+    const at = now - (18 - (i % 4)) * DAY;
+    e.status = "completed";
+    out.push({ id: `cert-${n}`, serial: serial(at), personId: p.id, enrolmentId: e.id, name: p.name, courseId: wb.id, courseTitle: wb.title, step: wb.step, teacher: "Esther Oyelaran", pastor: PASTOR, issuedAt: new Date(at).toISOString(), issuedById: "u23", status: "valid", replaces: null, replacedBy: null, reason: null });
+  });
+  return out.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
 }

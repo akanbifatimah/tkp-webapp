@@ -39,7 +39,7 @@ export function JourneyPage() {
 
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
-      <PageHeader eyebrow="2 · Connect · One guest, start to finish" title="Guest journey" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
+      <PageHeader eyebrow="Connect · One guest, start to finish" title="Guest journey" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
       <DraftNotice questions="Q13">The layout follows the approved mockup, adjusted to today’s data model (Active · Completed · Closed, no Paused). Final design still to be agreed.</DraftNotice>
       {id === null ? <GuestPicker /> : q.isError ? <ErrorBanner>{q.error.message}</ErrorBanner> : !q.data ? <Skeleton className="h-125 rounded-3xl" /> : <Journey d={q.data} />}
     </motion.div>

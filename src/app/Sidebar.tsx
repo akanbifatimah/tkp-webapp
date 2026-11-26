@@ -1,4 +1,4 @@
-import { ChevronDown, FlaskConical, KeyRound, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronDown, FlaskConical, KeyRound, LogOut, PanelLeftClose, PanelLeftOpen, Signature } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router";
@@ -85,32 +85,8 @@ export function Sidebar({
                     active ? "text-maroon-800" : "text-cream-100/80 hover:bg-white/8 hover:text-cream-50",
                   )}
                 >
-                  <span className="relative">
-                    <Icon className={cn("size-4.5 shrink-0", active ? "text-maroon-700" : "text-gold-300/80")} aria-hidden />
-                    {collapsed && g.step ? (
-                      <span
-                        className={cn(
-                          "absolute -top-2 -right-2.5 grid size-3.5 place-items-center rounded-full text-[8px] font-extrabold",
-                          active ? "bg-maroon-700 text-cream-50" : "bg-white/15 text-cream-100/70",
-                        )}
-                        aria-hidden
-                      >
-                        {g.step}
-                      </span>
-                    ) : null}
-                  </span>
+                  <Icon className={cn("size-4.5 shrink-0", active ? "text-maroon-700" : "text-gold-300/80")} aria-hidden />
                   {collapsed ? null : <span className="truncate">{g.label}</span>}
-                  {!collapsed && g.step ? (
-                    <span
-                      className={cn(
-                        "ml-auto grid size-5 place-items-center rounded-full text-[10px] font-extrabold tabular",
-                        active ? "bg-maroon-700 text-cream-50" : "bg-white/10 text-cream-100/60",
-                      )}
-                      aria-label={`Journey step ${g.step}`}
-                    >
-                      {g.step}
-                    </span>
-                  ) : null}
                   {g.planned ? <span className="sr-only">(coming soon)</span> : null}
                 </NavLink>
                 {hasTabs && !active && !collapsed ? (
@@ -257,6 +233,11 @@ function UserCard({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
             {avatar}
           </span>
         </RailTooltip>
+        <RailTooltip label="My signature" enabled>
+          <NavLink to="/account/signature" onClick={onNavigate} aria-label="My signature" className={iconButton}>
+            <Signature className="size-4.5" />
+          </NavLink>
+        </RailTooltip>
         <RailTooltip label="Change password" enabled>
           <NavLink to="/account/password" onClick={onNavigate} aria-label="Change password" className={iconButton}>
             <KeyRound className="size-4.5" />
@@ -279,6 +260,11 @@ function UserCard({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
           <span className="block truncate text-sm font-bold text-cream-50">{member.fullName}</span>
           <span className="block truncate text-xs text-cream-100/60">{ROLE_LABEL[activeRole]}</span>
         </span>
+        <Tooltip label="My signature">
+          <NavLink to="/account/signature" onClick={onNavigate} aria-label="My signature" className={iconButton}>
+            <Signature className="size-4.5" />
+          </NavLink>
+        </Tooltip>
         <Tooltip label="Change password">
           <NavLink to="/account/password" onClick={onNavigate} aria-label="Change password" className={iconButton}>
             <KeyRound className="size-4.5" />

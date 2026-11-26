@@ -35,7 +35,7 @@ export function OverviewPage() {
 
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
-      <PageHeader eyebrow="1 · Welcome" title="Overview" tagline={WELCOME_TAGLINE} />
+      <PageHeader eyebrow="Welcome" title="Overview" tagline={WELCOME_TAGLINE} />
 
       {/* Date control and Show (UI-W1) */}
       <motion.div variants={fadeUp} className="flex flex-wrap items-end gap-3">

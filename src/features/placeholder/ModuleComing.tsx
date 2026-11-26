@@ -49,8 +49,8 @@ export function ModuleComing({ spec }: { spec: ComingSpec }) {
 }
 
 
-const later = (step: number, title: string, features: string[]): ComingSpec => ({
-  eyebrow: `${step} · ${title}`,
+const later = (title: string, features: string[]): ComingSpec => ({
+  eyebrow: title,
   title,
   milestone: "Part 2 · from the PRD",
   source: "TKP Hub PRD",
@@ -58,11 +58,11 @@ const later = (step: number, title: string, features: string[]): ComingSpec => (
 });
 
 export const COMING_LATER: Record<string, ComingSpec> = {
-  belong: later(3, "Belong", ["Small groups and the opt-in member directory", "Cell groups and rosters"]),
-  grow: later(4, "Grow", ["Class catalogue and enrolment for members and External Students", "Lessons, exams and your certificates (member portal)"]),
-  care: later(5, "Care", ["Prayer Wall moderation", "Care team overview"]),
-  serve: later(6, "Serve", ["Projects, positions and applicant review", "Events and 168 Hours of Praise"]),
-  lead: later(7, "Lead", ["Leadership dashboards with totals only"]),
-  go: later(8, "Go", ["Outreach and missions"]),
-  transform: later(9, "Transform", ["Long-term discipleship metrics"]),
+  belong: later("Belong", ["Small groups and the opt-in member directory", "Cell groups and rosters"]),
+  grow: later("Grow", ["Class catalogue and enrolment for members and External Students", "Lessons, exams and your certificates (member portal)"]),
+  care: later("Care", ["Prayer Wall moderation", "Care team overview"]),
+  serve: later("Serve", ["Projects, positions and applicant review", "Events and 168 Hours of Praise"]),
+  lead: later("Lead", ["Leadership dashboards with totals only"]),
+  go: later("Go", ["Outreach and missions"]),
+  transform: later("Transform", ["Long-term discipleship metrics"]),
 };

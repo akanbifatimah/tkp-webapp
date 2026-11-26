@@ -193,6 +193,8 @@ describe("landing and navigation", () => {
     const member = visibleNav((p) => can("tkp_member", p)).find((g) => g.id === "grow");
     expect(member?.tabs).toEqual([]);
     const registrar = visibleNav((p) => can("registrar", p)).find((g) => g.id === "grow");
-    expect(registrar?.tabs?.map((t) => t.label)).toEqual(["Dashboard", "Classes"]);
+    expect(registrar?.tabs?.map((t) => t.label)).toEqual(["Dashboard", "Classes", "Certificates", "Drop-off report"]);
+    const teacher = visibleNav((p) => can("course_author", p)).find((g) => g.id === "grow");
+    expect(teacher?.tabs?.map((t) => t.label)).toEqual(["Dashboard", "Classes", "Certificates"]);
   });
 });

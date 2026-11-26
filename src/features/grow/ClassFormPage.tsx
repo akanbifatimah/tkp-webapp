@@ -312,7 +312,7 @@ function ClassForm({ editing, options }: { editing?: CourseDetail; options: { te
           {editing ? `Back to ${editing.title}` : "Back to classes"}
         </button>
       </motion.div>
-      <PageHeader eyebrow="4 · Grow" title={editing ? "Edit class" : "Create a class"} tagline={editing ? editing.title : "Set it up once. Sessions, the roster and certificates follow from here."} />
+      <PageHeader eyebrow="Grow" title={editing ? "Edit class" : "Create a class"} tagline={editing ? editing.title : "Set it up once. Sessions, the roster and certificates follow from here."} />
       {banner ? <ErrorBanner>{banner}</ErrorBanner> : null}
 
       <Section n={1} title="Basics" tag="Core identity">

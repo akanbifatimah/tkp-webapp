@@ -38,6 +38,8 @@ import {
   sessionsOf,
   staffPerson,
 } from "./grow-core";
+import { certificateAttention } from "./grow-certs";
+import { forumAttention } from "./grow-forum";
 import { reviewAttention } from "./grow-review";
 import { assessmentsOf, attendanceSummary, attendedCount, getSessionDetail, joinedThisWeek, teachingAttention } from "./grow-teaching";
 import type { CourseRecord, EnrolmentRecord, SessionRecord } from "./seed/grow";
@@ -875,7 +877,7 @@ export function overview(u: StaffRecord, now = Date.now()): Result<GrowOverview>
       });
       continue;
     }
-    attention.push(...teachingAttention(c, now), ...reviewAttention(u, c));
+    attention.push(...teachingAttention(c, now), ...reviewAttention(u, c), ...forumAttention(u, c));
     if (status === "completed") continue;
     for (const s of sessionsOf(c.id)) {
       if (s.state !== "draft" || !s.startsAt) continue;
@@ -902,9 +904,11 @@ export function overview(u: StaffRecord, now = Date.now()): Result<GrowOverview>
       });
   }
 
+  const certs = certificateAttention(u, now);
+  attention.push(...certs.items);
   return ok({
     term: { label: `${term.label} term`, week },
-    tiles: { enrolled: people.size, waitlisted: waiting, running: live.filter((c) => statusOf(c, now) === "in_session").length, sessionsThisWeek: weekRows.length, joinedThisWeek: joinedThisWeek(mine, now) },
+    tiles: { enrolled: people.size, waitlisted: waiting, running: live.filter((c) => statusOf(c, now) === "in_session").length, sessionsThisWeek: weekRows.length, joinedThisWeek: joinedThisWeek(mine, now), awaitingCertificates: certs.awaiting },
     attention,
     week: weekRows,
     can: { manage: canManage(u) },

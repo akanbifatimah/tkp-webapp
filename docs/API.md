@@ -87,6 +87,15 @@ Request:
 
 Audit `mfa.code_sent`. `sign_in` is written only when the code is accepted. TKP Members get the session straight away, as before. The method (email code) is to be confirmed with TKP; an authenticator app would keep the same `ticket` + `code` contract.
 
+**Remember this device for 30 days (TKP, 2026-11-26).** Staff asked not to type a code at every sign-in. The code screen has "Remember this device for 30 days", ticked by default.
+
+- **Remembering:** `POST /auth/mfa/verify` takes `remember: true` and a readable `deviceLabel` ("Edge on Windows"). The session answer then adds `device: { token, expiresAt }`. The browser keeps the token for that email (`localStorage`). Audited as `mfa.device_remembered`.
+- **Using it:** `POST /auth/sign-in` takes `deviceToken`. If it belongs to this person, is under 30 days old and nothing has revoked it, the session starts with no code. The `sign_in` audit row then names the remembered device.
+- **What forgets it:** changing or resetting the password, "Sign out everywhere", and deactivating the account. All of these set the account's revocation time, and a device remembered before then no longer counts. An ordinary sign-out does **not** forget it.
+- **When the server ignores the token**, it answers with the usual `mfa` challenge, and the browser drops the token.
+- **Backend:** store only a hash of the token, with the person, label, created, expires and last used. Send it as an HttpOnly cookie, or keep it in the body as here.
+- **Mock only:** remembered devices are saved in the browser so they survive a page reload. The rest of the mock data resets.
+
 ### `POST /auth/mfa/verify`
 
 Request: `{ "ticket": "…", "code": "123456" }`. 200: the same as a sign-in with a session (`token`, `expiresAt`, `member`); audit `sign_in`; `lastSignInAt` is stamped.
@@ -1632,8 +1641,8 @@ Demo accounts:
 **Next in M8:**
 - step 2: attendance and the assessment builder (§14, built);
 - step 3: grading (§15, built);
-- step 4: certificates and the drop-off report;
-- step 5: the cohort forum.
+- step 4: certificates and the drop-off report (§16, built);
+- step 5: the cohort forum (§17, built).
 
 **Open questions:**
 - **Terms.** Does TKP name its terms Spring, Summer and Autumn, starting in January, May and September?
@@ -1853,3 +1862,211 @@ Audit: `learn.review.save`, `learn.review.return` and `learn.review.change`, eac
 **Open questions:**
 - **Outcomes.** Are Passed, Let's talk and Try again the right three?
 - **Notes.** Should notes always be shared, or stay optional as in the Figma?
+
+---
+
+## 16. Grow: certificates and the drop-off report (M8 step 4)
+
+This step follows the Figma Grow flow (TKP, 2026-11-26).
+
+Figma screens:
+- `136:28021` and `136:28427`: Certificate Review
+- `136:28729`: Drop-Off Reports
+- `131:12926`: the member's view of a certificate, used for what a certificate shows
+
+The PRD covers LMS-9 (certificates with a unique code and a public verify page), G-12 (the verify endpoint) and PL-1 (small groups hidden).
+
+Screens:
+- Grow › Certificates: `/grow/certificates`, for anyone with `learn.view`, limited to their classes
+- Grow › Drop-off report: `/grow/drop-off`, needs `learn.all`
+
+The mock is `src/mocks/grow-certs.ts`, with its tests in `src/mocks/grow-certs.test.ts`.
+
+### Who is ready
+
+A person is **ready** when they are on the class, have no valid certificate for it, and meet its completion rules (§13):
+- **Attendance:** sessions marked Joined or Recording (§14) reach `completion.attendance`. For self-paced classes, a session counts once it's opened.
+- **Assessment rule:**
+  - `none`: nothing needed;
+  - `final`: the final assessment returned as Passed, or excused;
+  - `every`: every published assessment Passed or excused (§15).
+
+Readiness doesn't wait for the last session. The Figma's "Attended 11 of 12 (make-up completed)" shows people can be ready early.
+
+`GET /learn/certificates` returns `{ ready, inProgress, issued, can: { issue } }`:
+- **`ready`:** `{ enrolmentId, name, courseId, courseTitle, attended, needed, sessions, assessment, step, teacher, pastor }`. `assessment` reads, for example, "Class Reflection passed", "Assessments passed", "No assessment needed" or "Excused from …".
+- **`inProgress`:** `{ enrolmentId, name, courseId, courseTitle, missing }`. `missing` reads, for example, "Attend or watch 2 more sessions", "Answer Class Reflection" or "Class Reflection: waiting for review".
+- **`issued`:** `Certificate[]`, newest first. Certificates from older cohorts (`courseId: null`) are listed only for people with `learn.all`.
+
+### Issue, reissue, revoke
+
+Only the Registrar (`learn.manage`) issues, reissues and revokes. The Figma's "Individual verification required" means there's no "issue all": each certificate is issued on its own, after the preview.
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `POST /learn/enrolments/{id}/certificate` | Issue, optionally with `{ name?, teacher?, pastor? }`: how those print, corrected on the preview. Blank or missing keeps the default (the person's name, the class teachers, the Lead Pastor); each is at most 80 characters, the name at least 2 (`422 VALIDATION_FAILED` with `fields`). The person's own record isn't changed. Checks readiness again (`422 NOT_READY` lists what's missing; `422 ALREADY_ISSUED`) → 201 `{ certificate }` | `learn.certificate.issue` (any corrected field, before and after) |
+| `POST /learn/certificates/{id}/reissue` | `{ reason, name }`. A **new copy with a new serial**; the old one becomes `replaced` (the Figma rule). `name` can correct a spelling | `learn.certificate.reissue` (old and new serial, name, reason) |
+| `POST /learn/certificates/{id}/revoke` | `{ reason }`. Status `revoked`; the record stays | `learn.certificate.revoke` |
+| `POST /learn/certificates/{id}/print` | Called before the PDF is downloaded | `learn.certificate.export` (category: exports) |
+
+**`Certificate`:** `{ id, serial, name, courseId, courseTitle, step, teacher, pastor, teacherSignature, pastorSignature, issuedAt, issuedBy, status, replaces, replacedBy, reason, verifyUrl }`, where `status` is `valid`, `replaced` or `revoked`.
+
+**Signatures.** Each staff member keeps one signature, drawn or uploaded on **My signature** (`/account/signature`, from the sidebar footer):
+
+| Endpoint | What it does | Audit |
+|---|---|---|
+| `GET /me/signature` | `{ signature }`: an image URL, or `null` | |
+| `PUT /me/signature` | `{ signature }`: a PNG or JPEG. The browser crops it and makes the paper transparent first; at most about 220 KB (`422 VALIDATION_FAILED`) | `account.signature.save` |
+| `DELETE /me/signature` | Removes it | `account.signature.remove` |
+
+- **Ready rows** carry `teacherSignature` and `pastorSignature`: the saved ones. The teacher's only when the class has exactly one teacher, since one person's signature shouldn't stand for several.
+- **Issuing** takes `teacherSignature` and `pastorSignature` too. Missing means the saved one, `null` means none, and an image means that one, for this certificate only (the person's saved signature isn't changed). The audit records `saved`, `added` or `none` for each, not the image.
+- **Issued certificates keep a copy** of the signatures they were issued with, so changing or removing a saved signature never alters them. A reissue keeps the same signatures. Certificates issued before signatures existed have none.
+- The mock stores images as data URLs; a real backend keeps the files in storage and returns their URLs.
+
+Rules we added where the Figma is silent:
+1. **Serials** run per calendar year: `TKP-2026-089`, as in the Figma.
+2. **Issuing completes the step.** The enrolment becomes `completed`, and the person's pathway step counts as finished, which meets later classes' prerequisites (§13).
+3. **Revoking** puts the enrolment back to `enrolled`. It also removes the finished step, unless another valid certificate covers it.
+4. **The certificate shows:**
+   - the church crest;
+   - "Certificate of completion";
+   - the name, the class and the pathway step;
+   - the class teacher and the parish pastor (the Lead Pastor account), each with their signature when there is one;
+   - the ID and issue date (the verify address isn't printed: the QR code carries it);
+   - a QR code to the verify page.
+
+   The flow is review → issue → download. **Issue certificate** opens the certificate as it will print, with the name, class teacher and parish pastor editable; issuing gives it its serial and QR code, and the same dialog then offers **Download PDF** (A4 landscape, made in the browser). A server-generated PDF (PRD 4.4, "certificate PDFs") can replace this without changing the screen.
+5. **Both reasons** (reissue and revoke) need 5 characters or more, for the pastoral audit. Nothing is ever deleted.
+
+### Public verify (PRD G-12, U17)
+
+`GET /public/certificates/{serial}`. No sign-in, case-insensitive. Returns name, course, date and status only:
+- `{ serial, name, course, issuedOn, status }`, where `status` is `valid`, `replaced` or `revoked`;
+- or `{ serial, status: "unknown" }` for a serial that doesn't exist.
+
+The printed link is `https://hub.tkp.example/verify/{serial}`, a placeholder like the QR domains in §9. The verify page belongs to the public web portal.
+
+### Drop-off report: `GET /learn/reports/drop-off?period=12m|year|all`
+
+`{ period, from, tracked, steps, insight, followUps, can: { copy } }`
+
+- **`steps`** has one row per pathway step: `{ step, label, started, movedOn, rate, hidden, nextOffered }`.
+  - `started`: people who started the step in the period, counting finished steps and current enrolments.
+  - `movedOn`: of those, people who have ever started the next step.
+  - When nobody has ever started the next step (it isn't offered yet), `movedOn` and `rate` are null. There's no drop to measure.
+  - **PL-1:** a step with fewer than 5 people is `hidden`, with its numbers zeroed.
+- **`insight`:** the step with the lowest `rate`, as `{ from, to, movedOn, started }`. This is the Figma's "Most people stop between Water Baptism and Growth Class – 42 of 96".
+- **`followUps`:** the Figma's "Follow-ups this week", as `{ id, title, detail, count, names }`. The lists are:
+  - the two biggest groups of "finished {step} in the last 4 months but haven't started {next}";
+  - for each class still running, people with no live join or recording watched in **21 days**.
+
+  `names` is filled only for people with `learn.export`.
+- **`POST /learn/reports/drop-off/copy`** with `{ list }` logs "Copy list" before the names reach the clipboard. Audited as `learn.dropoff.export` (category: exports).
+
+### Dashboard
+
+- **Tiles:** **"Awaiting certificates"** (from the Figma) replaces "Waiting for a seat". The waitlist count moves into its hint.
+- **Alerts:**
+  - "{n} people finished {class}: certificates ready to issue". It names the rule met, as the Figma does ("Requirements met: …"), and goes to `/grow/certificates`.
+  - For people with `learn.all`: "{n} people haven't joined any session in 3 weeks", going to the drop-off report.
+
+**Mock data:**
+- Water Baptism Class finished three weeks ago. Most people who came to both sessions already have certificates; four are ready.
+- Seven self-paced prayer learners are ready.
+- Earlier cohorts have certificates in the register (`TKP-2026-061` onwards).
+- Everyone has a dated pathway history, so the report's periods differ.
+
+**Open questions:**
+- **Certificate design.** One for every class, or one per class (PRD "certificate templates")? And who signs: the class teacher and the Lead Pastor?
+- **Verify address.** The domain for the public verify page.
+- **Pathway.** Is "moved on" right as "started the next step"? Or should it be "finished the next step"?
+
+---
+
+## 17. Grow: the cohort forum (M8 step 5)
+
+This step follows the Figma Grow flow (TKP, 2026-11-26).
+
+Figma screens:
+- `136:29952`: Cohort Community and Forum
+- `136:30735`: Forum thread detail
+
+The forum isn't in the PRD. TKP included it on 2026-11-25.
+
+Screens:
+- `/grow/classes/{id}/forum`: opened from "Class forum" on the class page, the dashboard and the session page's "Forum activity"
+- `/grow/classes/{id}/forum/{threadId}`
+
+The mock is `src/mocks/grow-forum.ts`, with its seed in `src/mocks/seed/forum.ts` and its tests in `src/mocks/grow-forum.test.ts`.
+
+**Who:**
+- **Learners post** from the member app (not in this console).
+- **Staff read, reply as pastors and moderate** here: the class's teachers and the Registrar.
+- **Graders, Church Admin and Tech Team** can read only. They never see hidden posts.
+
+### `GET /learn/courses/{id}/forum?filter=&q=&sort=&page=`
+
+`{ course: { id, title, enrolled, moderators }, stats: { threads, needsPastor, participation, participants }, counts, pinned, items, page, pageSize: 10, total, can: { moderate, reply } }`
+
+- **`filter`:** `all`, `pastor` ("Pastor replies needed"), `reflection`, `prayer`, `question` or `testimony`. The Figma has the first five; testimonies are the Figma's "Uplifting testimony" tag.
+- **`q`:** searches titles, posts and author names.
+- **`sort`:** `activity` (latest activity), `newest` or `replies`.
+- **`pinned`:** shown above the list on the unfiltered first view.
+- **`participation`:** the share of enrolled people who posted or replied in the last 30 days.
+
+**`ThreadSummary`:** `{ id, kind, session, title, excerpt, body, author: { name, staff, role }, createdAt, lastActivityAt, lastBy, replies, amens, pinned, locked, hidden, needsPastor, shepherdDone, pastoral }`.
+- `pastoral` is the latest pastoral reply, shown under the thread as in the Figma.
+- `amens` are the Figma's "Blessings", which learners give from the app.
+
+### `GET /learn/forum/threads/{id}`
+
+The summary plus `{ courseId, courseTitle, posts: [{ id, author, body, createdAt, pastoral, amens, hidden }], can: { moderate, reply, editPrompt } }`. Replies come oldest first. The screen shows the latest six, with "View all N replies".
+
+**Post text** is plain text. A blank line starts a new paragraph. A line starting `> ` is a Scripture passage, which the composer's "Insert passage" adds.
+
+### Pastoral replies and prompts
+
+| Call | Body or effect | Audit |
+|---|---|---|
+| `POST /learn/forum/threads/{id}/replies` | `{ body }` (2–4,000 characters). Staff replies are always pastoral, and can be posted on a locked thread | `learn.forum.reply` |
+| `POST /learn/courses/{id}/forum` | `{ title (5–160), body (10–4,000), session, pin }`. A staff reflection prompt, like the Figma's pinned "Session 5 Reflection Prompt" | `learn.forum.prompt` |
+| `PUT /learn/forum/threads/{id}` | `{ title, body }`, staff prompts only ("Edit message"). Members' posts are never edited: `422 NOT_EDITABLE` | `learn.forum.edit` |
+
+**Drafts.** "Save as draft" and the autosave ("Draft saved") keep the reply **on this device** (`localStorage`). A draft doesn't go to the server until it's posted.
+
+### Moderation
+
+Rules we added where the Figma is silent:
+
+1. **"Needs a pastor."** A question or prayer request waits for a pastor until a pastor replies or someone marks it **"shepherd done"**. "Mark shepherd done" is from the Figma and is for when the pastor followed up another way, such as a call. It can be undone.
+2. **Pinning.** One pinned conversation per class. Pinning another unpins the old one.
+3. **Locking** stops the cohort replying. Pastors still can.
+4. **Hiding** needs a reason of 5 characters or more and works on a whole conversation or one reply.
+   - The cohort stops seeing it, and the author isn't told.
+   - Moderators still see it, marked with who hid it and why, and can **restore** it.
+   - Nothing is deleted. A hidden conversation is also unpinned.
+5. The Figma's "**Private message**" button isn't built. It needs a messaging module (and the member's consent to be contacted), which isn't in scope yet.
+
+| Call | Body | Audit |
+|---|---|---|
+| `PUT /learn/forum/threads/{id}/pinned` · `/locked` · `/shepherdDone` | `{ on }` | `learn.forum.pin` / `.unpin`, `.lock` / `.unlock`, `.shepherd` / `.unshepherd` |
+| `PUT /learn/forum/threads/{id}/hidden` · `PUT /learn/forum/posts/{id}/hidden` | `{ reason }` to hide; `{ reason: null }` to restore | `learn.forum.hide` / `.restore` |
+
+**Elsewhere:**
+- **Dashboard:** "{class}: N questions and prayer requests wait for a pastor", for that class's teachers and the Registrar. It goes to the forum filtered by `pastor`.
+- **Session page:** the "Forum activity" card counts the conversations about that session.
+
+**Mock data:** Growth Class has:
+- the pinned Session 5 prompt with 18 replies;
+- three conversations waiting for a pastor, including the Figma's "stillness" question;
+- testimonies with Pastor Doyin's replies;
+- one conversation that's already shepherded, and one hidden;
+- enough reflections to fill two pages.
+
+New Believers has three conversations.
+
+**Open questions:**
+- **Learner posting rules.** Can members post anonymously? Who can see prayer requests: the cohort, or only the pastors?
+- **Private messages.** Should "Private message" use email, SMS or in-app messages, and with what consent?
+- **Notifications.** Should a pastoral reply notify the person who asked?

@@ -81,7 +81,7 @@ export function LcmPage() {
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-8">
       <PageHeader
-        eyebrow="1 · Welcome · Leadership Council Meeting"
+        eyebrow="Welcome · Leadership Council Meeting"
         title={d ? `LCM Metrics · ${ym(d.meta.month)}${d.meta.inProgress ? ` (to ${serviceDateShort(d.meta.asOf)})` : ""}` : "LCM Metrics"}
         tagline={WELCOME_TAGLINE}
         actions={

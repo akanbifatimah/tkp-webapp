@@ -24,8 +24,18 @@ import type {
   AssessmentInput,
   AttendanceInput,
   AttendanceSheet,
+  Certificate,
+  CertificateCheck,
+  CertificatesResponse,
   CourseDetail,
   CourseInput,
+  DropOffPeriod,
+  DropOffReport,
+  ForumFilter,
+  ForumResponse,
+  ForumSort,
+  NewPromptInput,
+  ThreadDetail,
   ReviewInput,
   SubmissionDetail,
   SubmissionsResponse,
@@ -133,6 +143,9 @@ export async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, "UNKNOWN", FALLBACK_MESSAGE);
 }
 
+/** Corrections from the review step. Signatures: missing = the saved one, null = none, an image = this one. */
+export type IssueCertificateBody = { name?: string; teacher?: string; pastor?: string; teacherSignature?: string | null; pastorSignature?: string | null };
+
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   // A file upload goes as multipart; the browser sets the boundary.
@@ -195,14 +208,21 @@ export const api = {
       staticJson<FeatureCollection<Geometry, { n: string; lat?: number; lon?: number }>>(`/geo/${name}.json`),
   },
   auth: {
-    signIn: (email: string, password: string) => request<SignInStep>("/auth/sign-in", { body: { email, password } }),
-    verifyMfa: (ticket: string, code: string) => request<SignInResponse>("/auth/mfa/verify", { body: { ticket, code } }),
+    signIn: (email: string, password: string, deviceToken?: string) => request<SignInStep>("/auth/sign-in", { body: { email, password, ...(deviceToken ? { deviceToken } : {}) } }),
+    verifyMfa: (ticket: string, code: string, remember: boolean, deviceLabel: string) =>
+      request<SignInResponse & { device?: { token: string; expiresAt: string } }>("/auth/mfa/verify", { body: { ticket, code, remember, deviceLabel } }),
     resendMfa: (ticket: string) => request<MfaChallenge>("/auth/mfa/resend", { body: { ticket } }),
     renew: () => request<SignInResponse>("/auth/token/renew", { method: "POST" }),
     signOut: () => request<void>("/auth/sign-out", { method: "POST" }),
     me: (signal?: AbortSignal) => request<{ member: Member }>("/me", { signal }),
     changePassword: (currentPassword: string, newPassword: string) =>
       request<{ signedOut: true }>("/auth/change-password", { body: { currentPassword, newPassword } }),
+  },
+  /** My signature, printed on certificates. */
+  signature: {
+    get: (signal?: AbortSignal) => request<{ signature: string | null }>("/me/signature", { signal }),
+    save: (signature: string) => request<{ signature: string }>("/me/signature", { method: "PUT", body: { signature } }),
+    remove: () => request<{ signature: null }>("/me/signature", { method: "DELETE" }),
   },
   settings: {
     public: () => request<PublicSettings>("/settings/public"),
@@ -310,6 +330,24 @@ export const api = {
       reason === null
         ? request<{ excused: boolean }>(`/learn/assessments/${assessmentId}/excused/${enrolmentId}`, { method: "DELETE" })
         : request<{ excused: boolean }>(`/learn/assessments/${assessmentId}/excused/${enrolmentId}`, { method: "PUT", body: { reason } }),
+    certificates: (signal?: AbortSignal) => request<CertificatesResponse>("/learn/certificates", { signal }),
+    issueCertificate: (enrolmentId: string, body: IssueCertificateBody = {}) =>
+      request<{ certificate: Certificate }>(`/learn/enrolments/${enrolmentId}/certificate`, { method: "POST", body }),
+    reissueCertificate: (id: string, body: { reason: string; name: string }) => request<{ certificate: Certificate }>(`/learn/certificates/${id}/reissue`, { body }),
+    revokeCertificate: (id: string, reason: string) => request<{ certificate: Certificate }>(`/learn/certificates/${id}/revoke`, { body: { reason } }),
+    logCertificatePrint: (id: string) => request<{ logged: true }>(`/learn/certificates/${id}/print`, { method: "POST" }),
+    dropOff: (period: DropOffPeriod, signal?: AbortSignal) => request<DropOffReport>("/learn/reports/drop-off", { query: { period }, signal }),
+    logDropOffCopy: (list: string) => request<{ logged: true }>("/learn/reports/drop-off/copy", { body: { list } }),
+    /** Public, no sign-in (PRD G-12). */
+    verifyCertificate: (serial: string) => request<CertificateCheck>(`/public/certificates/${encodeURIComponent(serial)}`),
+    forum: (courseId: string, q: { filter: ForumFilter; q: string; sort: ForumSort; page: number }, signal?: AbortSignal) =>
+      request<ForumResponse>(`/learn/courses/${courseId}/forum`, { query: q, signal }),
+    thread: (id: string, signal?: AbortSignal) => request<ThreadDetail>(`/learn/forum/threads/${id}`, { signal }),
+    replyToThread: (id: string, body: string) => request<ThreadDetail>(`/learn/forum/threads/${id}/replies`, { body: { body } }),
+    createPrompt: (courseId: string, body: NewPromptInput) => request<ThreadDetail>(`/learn/courses/${courseId}/forum`, { body }),
+    editPrompt: (id: string, body: { title: string; body: string }) => request<ThreadDetail>(`/learn/forum/threads/${id}`, { method: "PUT", body }),
+    setThreadFlag: (id: string, flag: "pinned" | "locked" | "shepherdDone", on: boolean) => request<ThreadDetail>(`/learn/forum/threads/${id}/${flag}`, { method: "PUT", body: { on } }),
+    setHidden: (kind: "threads" | "posts", id: string, reason: string | null) => request<{ hidden: boolean }>(`/learn/forum/${kind}/${id}/hidden`, { method: "PUT", body: { reason } }),
     logRosterExport: (courseId: string) => request<{ logged: true }>(`/learn/courses/${courseId}/roster/export`, { method: "POST" }),
   },
   imports: {

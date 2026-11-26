@@ -40,7 +40,7 @@ export function ClassesPage() {
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
       <PageHeader
-        eyebrow="4 · Grow"
+        eyebrow="Grow"
         title="Classes"
         tagline={d?.scope === "assigned" ? "The classes you teach or mark." : "Everything running in Grow."}
         actions={

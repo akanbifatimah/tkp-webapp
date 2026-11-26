@@ -2,16 +2,17 @@ import { HttpResponse, http } from "msw";
 import { checkPassword } from "@/lib/password-policy";
 import { audit, db } from "../db";
 import { authenticate, fail, issueToken, latency, path, toMember } from "../http";
-import { needsMfa, resendMfa, startMfa, verifyMfa } from "../mfa";
+import { needsMfa, rememberDevice, resendMfa, startMfa, trustedDevice, verifyMfa } from "../mfa";
 import type { StaffRecord } from "../seed/staff";
+import { mySignature, removeMySignature, saveMySignature } from "../signatures";
 import { send } from "./connect";
 
 /** A full session, once every sign-in step has passed. */
-function signedIn(user: StaffRecord) {
+function signedIn(user: StaffRecord, extra: { device?: { token: string; expiresAt: string }; trusted?: string } = {}) {
   const { token, expiresAt } = issueToken(user.id);
   user.lastSignInAt = new Date().toISOString();
-  audit(user.id, "sign_in");
-  return HttpResponse.json({ token, expiresAt, member: toMember(user) });
+  audit(user.id, "sign_in", null, extra.trusted ? { after: { rememberedDevice: extra.trusted } } : undefined);
+  return HttpResponse.json({ token, expiresAt, member: toMember(user), ...(extra.device ? { device: extra.device } : {}) });
 }
 
 /** API-A1: one message for every failure. */
@@ -20,7 +21,7 @@ const INVALID = "Invalid email or password";
 export const authHandlers = [
   http.post(path("/auth/sign-in"), async ({ request }) => {
     await latency();
-    const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
+    const body = (await request.json().catch(() => null)) as { email?: string; password?: string; deviceToken?: string } | null;
     const email = body?.email?.trim().toLowerCase() ?? "";
     const user = db.staff.find((u) => u.email === email);
     if (!user || !user.isActive || body?.password !== user.password) {
@@ -28,15 +29,21 @@ export const authHandlers = [
       return fail(401, "INVALID_CREDENTIALS", INVALID);
     }
     // PRD A-2: staff prove it is them with a one-time code before a session exists.
-    if (needsMfa(user)) return HttpResponse.json({ mfa: startMfa(user) });
+    // A device remembered in the last 30 days skips the code (TKP, 2026-11-26).
+    if (needsMfa(user)) {
+      const device = trustedDevice(user, body?.deviceToken);
+      if (device) return signedIn(user, { trusted: device.label });
+      return HttpResponse.json({ mfa: startMfa(user) });
+    }
     return signedIn(user);
   }),
 
   http.post(path("/auth/mfa/verify"), async ({ request }) => {
     await latency();
-    const body = (await request.json().catch(() => null)) as { ticket?: string; code?: string } | null;
+    const body = (await request.json().catch(() => null)) as { ticket?: string; code?: string; remember?: boolean; deviceLabel?: string } | null;
     const r = verifyMfa(body?.ticket ?? "", body?.code ?? "");
-    return r.ok ? signedIn(r.body.user) : send(r);
+    if (!r.ok) return send(r);
+    return signedIn(r.body.user, body?.remember ? { device: rememberDevice(r.body.user, body.deviceLabel ?? "") } : {});
   }),
 
   http.post(path("/auth/mfa/resend"), async ({ request }) => {
@@ -63,6 +70,26 @@ export const authHandlers = [
     const auth = authenticate(request, { allowMustChange: true });
     if (auth instanceof Response) return auth;
     return HttpResponse.json({ member: toMember(auth.user) });
+  }),
+
+  /** My signature, for certificates (docs/API.md §16). */
+  http.get(path("/me/signature"), async ({ request }) => {
+    await latency();
+    const auth = authenticate(request);
+    if (auth instanceof Response) return auth;
+    return send(mySignature(auth.user));
+  }),
+  http.put(path("/me/signature"), async ({ request }) => {
+    await latency();
+    const auth = authenticate(request);
+    if (auth instanceof Response) return auth;
+    return send(saveMySignature(auth.user, ((await request.json().catch(() => null)) ?? {}) as { signature?: unknown }));
+  }),
+  http.delete(path("/me/signature"), async ({ request }) => {
+    await latency();
+    const auth = authenticate(request);
+    if (auth instanceof Response) return auth;
+    return send(removeMySignature(auth.user));
   }),
 
   /** TKP Connect auth-change-password. On success every session of this person ends (API-A6). */

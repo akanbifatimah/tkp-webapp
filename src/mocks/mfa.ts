@@ -1,5 +1,5 @@
 import type { Result } from "./connect-api";
-import { audit, db } from "./db";
+import { audit, db, TRUSTED_DEVICES_STORE } from "./db";
 import type { StaffRecord } from "./seed/staff";
 import { isStaff } from "@/lib/permissions";
 import { mockInbox } from "./inbox";
@@ -104,3 +104,41 @@ export function resendMfa(ticket: string, now = Date.now()): Result<MfaChallenge
   audit(user.id, "mfa.code_sent");
   return { ok: true, status: 200, body: send(user, ticket, now, p.sends + 1) };
 }
+
+/* ============================================================ trusted devices */
+
+/**
+ * "Remember this device for 30 days" (TKP, 2026-11-26): after a correct code,
+ * the browser gets a device token. Signing in with it skips the code until it
+ * expires. Changing or resetting the password, "Sign out everywhere" and
+ * deactivation all set sessionsRevokedAt, which forgets every remembered device.
+ */
+export const TRUST_DAYS = 30;
+const DAY = 86_400_000;
+
+export type TrustedDevice = { id: string; userId: string; token: string; label: string; createdAt: number; expiresAt: number; lastUsedAt: number };
+
+export function rememberDevice(u: StaffRecord, label: string, now = Date.now()) {
+  const d: TrustedDevice = { id: crypto.randomUUID(), userId: u.id, token: crypto.randomUUID() + crypto.randomUUID(), label: label.slice(0, 120) || "A browser", createdAt: now, expiresAt: now + TRUST_DAYS * DAY, lastUsedAt: now };
+  db.trustedDevices.push(d);
+  saveDevices();
+  audit(u.id, "mfa.device_remembered", null, { after: { device: d.label, days: TRUST_DAYS } });
+  return { token: d.token, expiresAt: new Date(d.expiresAt).toISOString() };
+}
+
+/** A remembered device still counts if it hasn't expired and nothing has revoked it since. */
+export function trustedDevice(u: StaffRecord, token: string | undefined, now = Date.now()): TrustedDevice | null {
+  if (!token) return null;
+  const d = db.trustedDevices.find((x) => x.userId === u.id && x.token === token);
+  if (!d || now >= d.expiresAt || d.createdAt <= u.sessionsRevokedAt) return null;
+  d.lastUsedAt = now;
+  saveDevices();
+  return d;
+}
+
+const saveDevices = () => {
+  if (typeof localStorage === "undefined") return;
+  // Keep only the ones still in date.
+  const live = db.trustedDevices.filter((x) => x.expiresAt > Date.now());
+  localStorage.setItem(TRUSTED_DEVICES_STORE, JSON.stringify(live));
+};

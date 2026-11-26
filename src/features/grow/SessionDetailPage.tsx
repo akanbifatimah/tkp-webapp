@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, CalendarDays, ClipboardList, ExternalLink, FileText, Link2, PencilLine, Play, Plus, UserCheck, Video } from "lucide-react";
+import { ArrowLeft, BookOpen, MessagesSquare, CalendarDays, ClipboardList, ExternalLink, FileText, Link2, PencilLine, Play, Plus, UserCheck, Video } from "lucide-react";
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
@@ -52,7 +52,7 @@ export function SessionDetailPage() {
         {d.attendance?.due ? <Chip tone="warn">Attendance not marked</Chip> : null}
       </motion.div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Attendance rate" icon={<UserCheck />}>
           {stats.attendanceRate !== null ? (
             <>
@@ -83,6 +83,14 @@ export function SessionDetailPage() {
             </>
           )}
         </Stat>
+        <Stat label="Forum activity" icon={<MessagesSquare />}>
+          <Big muted={!stats.forumThreads}>{stats.forumThreads}</Big>
+          <Small>
+            <Link to={`/grow/classes/${c.id}/forum`} className="font-bold text-maroon-700 hover:underline">
+              {stats.forumThreads === 1 ? "Conversation" : "Conversations"} about this session
+            </Link>
+          </Small>
+        </Stat>
         <Stat label="Video engagement" icon={<Play />}>
           {stats.videoWatch !== null ? (
             <>
@@ -100,7 +108,7 @@ export function SessionDetailPage() {
 
       <Card className="bg-cream-100">
         <p className="mb-3 text-sm font-bold text-muted">Quick links</p>
-        <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
           {d.can.attendance ? (
             <Button variant="dark" icon={<UserCheck className="size-4" />} onClick={() => void navigate(`/grow/classes/${c.id}/sessions/${s.id}/attendance`)}>
               {d.attendance?.state === "saved" ? "Attendance" : "Take attendance"}

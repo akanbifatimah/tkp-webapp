@@ -13,8 +13,8 @@ import { useSidebarCollapsed } from "./rail";
 import { Sidebar } from "./Sidebar";
 
 /**
- * Figma "TKP Hub" layout: maroon sidebar on a near-black frame, cream work
- * panel with rounded corners. On desktop the sidebar collapses to an icon rail
+ * Figma "TKP Hub" layout: full-height maroon sidebar flush against the cream
+ * work panel, so the two read as one surface. On desktop the sidebar collapses to an icon rail
  * (remembered per browser); below 1024 px it becomes a drawer.
  */
 export function AppShell() {
@@ -34,7 +34,7 @@ export function AppShell() {
   }, [drawer]);
 
   return (
-    <div className="min-h-svh bg-maroon-950 lg:flex lg:gap-3 lg:p-3">
+    <div className="min-h-svh bg-maroon-950 lg:flex">
       <a
         href="#main"
         className="sr-only z-200 rounded-lg bg-gold-400 px-4 py-2 font-bold text-maroon-950 focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
@@ -46,7 +46,7 @@ export function AppShell() {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          "bg-sidebar grain sticky top-3 hidden h-[calc(100svh-1.5rem)] shrink-0 overflow-hidden rounded-3xl transition-[width] duration-250 ease-out lg:block",
+          "bg-sidebar grain sticky top-0 hidden h-svh shrink-0 overflow-hidden transition-[width] duration-250 ease-out lg:block",
           collapsed ? "w-20" : "w-72",
         )}
       >
@@ -102,7 +102,7 @@ export function AppShell() {
 
       <main
         id="main"
-        className="min-h-[calc(100svh-4rem)] min-w-0 flex-1 bg-cream-100 lg:min-h-[calc(100svh-1.5rem)] lg:rounded-3xl"
+        className="min-h-[calc(100svh-4rem)] min-w-0 flex-1 bg-cream-100 lg:min-h-svh"
       >
         <TopStrip />
         <AnimatePresence mode="wait" initial={false}>

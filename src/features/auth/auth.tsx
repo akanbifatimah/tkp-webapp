@@ -21,8 +21,8 @@ type AuthState = {
   has: (p: Permission) => boolean;
   /** Password step. Staff get an MFA challenge instead of a session (PRD A-2). */
   signIn: (email: string, password: string) => Promise<SignInResult>;
-  /** Code step: completes the sign-in. */
-  verifyMfa: (ticket: string, code: string) => Promise<Member>;
+  /** Code step: completes the sign-in; `remember` skips the code on this browser for 30 days. */
+  verifyMfa: (ticket: string, code: string, remember: boolean) => Promise<Member>;
   signOut: () => Promise<void>;
   /** Forget the session locally (the server already ended it, e.g. after a password change). */
   endSession: (reason: EndReason) => void;
@@ -42,6 +42,28 @@ export type SignInResult = { kind: "done"; member: Member } | { kind: "mfa"; cha
 const AuthContext = createContext<AuthState | null>(null);
 
 const ROLE_KEY = "tkp.activeRole";
+/** Remembered devices: email → device token ("Remember this device for 30 days"). Kept across sign-outs. */
+const DEVICES_KEY = "tkp.trustedDevices";
+const readDevices = (): Record<string, string> => {
+  try {
+    return JSON.parse(localStorage.getItem(DEVICES_KEY) ?? "{}") as Record<string, string>;
+  } catch {
+    return {};
+  }
+};
+const writeDevice = (email: string, token: string | null) => {
+  const all = readDevices();
+  if (token) all[email.toLowerCase()] = token;
+  else delete all[email.toLowerCase()];
+  localStorage.setItem(DEVICES_KEY, JSON.stringify(all));
+};
+/** A short, readable name for this browser, for the audit log. */
+const deviceLabel = () => {
+  const ua = navigator.userAgent;
+  const browser = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "A browser";
+  const os = /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "Mac" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Linux/.test(ua) ? "Linux" : "";
+  return os ? `${browser} on ${os}` : browser;
+};
 const EXPIRES_KEY = "tkp.expiresAt";
 /** Renew this long before expiry. */
 const RENEW_LEAD_MS = 5 * 60 * 1000;
@@ -126,14 +148,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string): Promise<SignInResult> => {
-      const res = await api.auth.signIn(email, password);
-      if ("mfa" in res) return { kind: "mfa", challenge: res.mfa };
+      const key = email.trim().toLowerCase();
+      const known = readDevices()[key];
+      const res = await api.auth.signIn(email, password, known);
+      if ("mfa" in res) {
+        // The server didn't accept the remembered device (expired or revoked): forget it here too.
+        if (known) writeDevice(key, null);
+        return { kind: "mfa", challenge: res.mfa };
+      }
       return { kind: "done", member: start(res) };
     },
     [start],
   );
 
-  const verifyMfa = useCallback(async (ticket: string, code: string) => start(await api.auth.verifyMfa(ticket, code)), [start]);
+  const verifyMfa = useCallback(
+    async (ticket: string, code: string, remember: boolean) => {
+      const res = await api.auth.verifyMfa(ticket, code, remember, deviceLabel());
+      if (res.device) writeDevice(res.member.email, res.device.token);
+      return start(res);
+    },
+    [start],
+  );
 
   const signOut = useCallback(async () => {
     await api.auth.signOut().catch(() => undefined);

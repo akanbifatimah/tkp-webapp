@@ -1,5 +1,5 @@
-import { http } from "msw";
-import type { AssessmentInput, AttendanceInput, CourseInput, ReviewInput, SessionInput, Upload } from "@/features/grow/grow-types";
+import { HttpResponse, http } from "msw";
+import type { AssessmentInput, AttendanceInput, CourseInput, NewPromptInput, ReviewInput, SessionInput, Upload } from "@/features/grow/grow-types";
 import { authenticate, latency, path } from "../http";
 import {
   addResource,
@@ -29,6 +29,8 @@ import {
   type UploadPurpose,
 } from "../grow-api";
 import { createAssessment, deleteAssessment, getAssessment, getAttendance, publishAssessment, saveAttendance, updateAssessment } from "../grow-teaching";
+import { dropOff, issueCertificate, type IssueEdits, listCertificates, logCertificatePrint, logDropOffCopy, reissueCertificate, revokeCertificate, verifyCertificate } from "../grow-certs";
+import { createPrompt, editPrompt, getThread, listForum, replyToThread, setHidden, setThreadFlag } from "../grow-forum";
 import { getSubmission, listSubmissions, remind, saveReview, setExcused } from "../grow-review";
 import { send } from "./connect";
 
@@ -84,6 +86,41 @@ export const growHandlers = [
   http.delete(path(`${R}/assessments/:id/excused/:enrolmentId`), route((u, _r, c) => setExcused(u, id(c), id(c, "enrolmentId"), null))),
   http.get(path(`${R}/submissions/:id`), route((u, _r, c) => getSubmission(u, id(c)))),
   http.put(path(`${R}/submissions/:id/review`), route(async (u, r, c) => saveReview(u, id(c), await body<Partial<ReviewInput>>(r)))),
+  http.get(path(`${R}/certificates`), route((u) => listCertificates(u))),
+  http.post(path(`${R}/enrolments/:id/certificate`), route(async (u, r, c) => issueCertificate(u, id(c), await body<IssueEdits>(r)))),
+  http.post(path(`${R}/certificates/:id/reissue`), route(async (u, r, c) => reissueCertificate(u, id(c), await body<{ reason?: string; name?: string }>(r)))),
+  http.post(path(`${R}/certificates/:id/revoke`), route(async (u, r, c) => revokeCertificate(u, id(c), await body<{ reason?: string }>(r)))),
+  http.post(path(`${R}/certificates/:id/print`), route((u, _r, c) => logCertificatePrint(u, id(c)))),
+  http.get(path(`${R}/reports/drop-off`), route((u, r) => dropOff(u, (new URL(r.url).searchParams.get("period") ?? "12m") as "12m"))),
+  http.post(path(`${R}/reports/drop-off/copy`), route(async (u, r) => logDropOffCopy(u, String((await body<{ list?: string }>(r)).list ?? "")))),
+  // PRD G-12: the public verify endpoint. No sign-in; name, course, date and status only.
+  http.get(path("/public/certificates/:serial"), async ({ params }) => {
+    await latency();
+    return HttpResponse.json(verifyCertificate(String(params.serial)), { headers: { "Cache-Control": "no-store" } });
+  }),
+  http.get(
+    path(`${R}/courses/:id/forum`),
+    route((u, r, c) => {
+      const p = new URL(r.url).searchParams;
+      return listForum(u, id(c), { filter: p.get("filter") ?? undefined, q: p.get("q") ?? undefined, sort: p.get("sort") ?? undefined, page: Number(p.get("page")) || 1 });
+    }),
+  ),
+  http.post(path(`${R}/courses/:id/forum`), route(async (u, r, c) => createPrompt(u, id(c), await body<Partial<NewPromptInput>>(r)))),
+  http.get(path(`${R}/forum/threads/:id`), route((u, _r, c) => getThread(u, id(c)))),
+  http.put(path(`${R}/forum/threads/:id`), route(async (u, r, c) => editPrompt(u, id(c), await body<{ title?: string; body?: string }>(r)))),
+  http.post(path(`${R}/forum/threads/:id/replies`), route(async (u, r, c) => replyToThread(u, id(c), await body<{ body?: string }>(r)))),
+  ...(["pinned", "locked", "shepherdDone"] as const).map((flag) =>
+    http.put(path(`${R}/forum/threads/:id/${flag}`), route(async (u, r, c) => setThreadFlag(u, id(c), flag, !!(await body<{ on?: boolean }>(r)).on))),
+  ),
+  ...(["threads", "posts"] as const).map((kind) =>
+    http.put(
+      path(`${R}/forum/${kind}/:id/hidden`),
+      route(async (u, r, c) => {
+        const b = await body<{ reason?: string | null }>(r);
+        return setHidden(u, kind === "threads" ? "thread" : "post", id(c), b.reason === null || b.reason === undefined ? null : String(b.reason));
+      }),
+    ),
+  ),
   http.delete(path(`${R}/assessments/:id`), route((u, _r, c) => deleteAssessment(u, id(c)))),
 
   http.put(path(`${R}/sessions/:id`), route(async (u, r, c) => updateSession(u, id(c), await body<SessionBody>(r)))),

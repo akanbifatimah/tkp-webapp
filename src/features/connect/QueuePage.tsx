@@ -44,7 +44,7 @@ export function QueuePage() {
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
       <PageHeader
-        eyebrow="2 · Connect · Who do I need to reach today?"
+        eyebrow="Connect · Who do I need to reach today?"
         title="Work queue"
         tagline={CONNECT_TAGLINE}
         actions={<ConfidentialChip />}

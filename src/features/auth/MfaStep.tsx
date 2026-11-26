@@ -30,6 +30,7 @@ export function MfaStep({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; hint?: string; deadEnd: boolean } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [remember, setRemember] = useState(true);
   const input = useRef<HTMLInputElement>(null);
   const waitFor = useCountdown(challenge.resendAt);
 
@@ -41,7 +42,7 @@ export function MfaStep({
     setError(null);
     setNotice(null);
     try {
-      onDone(await verifyMfa(challenge.ticket, value));
+      onDone(await verifyMfa(challenge.ticket, value, remember));
     } catch (e) {
       const err = e instanceof ApiError ? e : null;
       setError({
@@ -79,8 +80,7 @@ export function MfaStep({
       </span>
       <h2 className="mt-4 font-display text-[32px] leading-tight font-semibold text-maroon-900">Check your email</h2>
       <p className="mt-1.5 text-[15px] text-muted">
-        We sent a 6-digit code to <b className="text-ink">{challenge.sentTo}</b>. It works for 10 minutes. Staff accounts need this step every
-        time they sign in.
+        We sent a 6-digit code to <b className="text-ink">{challenge.sentTo}</b>. It works for 10 minutes.
       </p>
 
       <AnimatePresence initial={false} mode="popLayout">
@@ -141,6 +141,16 @@ export function MfaStep({
         <p id="mfa-help" className="mt-1.5 text-xs text-muted">
           No email? Check spam, or ask for a new code.
         </p>
+
+        {!dead ? (
+          <label className="mt-4 flex items-start gap-3 rounded-xl border border-line bg-white px-3.5 py-3">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="mt-0.5 size-4.5 shrink-0 accent-maroon-700" />
+            <span>
+              <span className="block text-sm font-bold text-ink">Remember this device for 30 days</span>
+              <span className="block text-xs text-muted">You won't need a code here until then. Untick it on a shared or public computer.</span>
+            </span>
+          </label>
+        ) : null}
 
         {dead ? (
           <Button variant="gold" size="lg" onClick={onBack} icon={<ArrowLeft className="size-4" />} className="mt-5 w-full">

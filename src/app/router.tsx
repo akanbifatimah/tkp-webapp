@@ -27,6 +27,7 @@ const ImportWizardPage = lazy(() => import("@/features/welcome/ImportWizardPage"
 const ReportsPage = lazy(() => import("@/features/reports/ReportsPage").then((m) => ({ default: m.ReportsPage })));
 const ReportPage = lazy(() => import("@/features/reports/ReportPage").then((m) => ({ default: m.ReportPage })));
 const SchedulesPage = lazy(() => import("@/features/reports/SchedulesPage").then((m) => ({ default: m.SchedulesPage })));
+const SignaturePage = lazy(() => import("@/features/account/SignaturePage").then((m) => ({ default: m.SignaturePage })));
 const QrPrintPage = lazy(() => import("@/features/welcome/QrPrintPage").then((m) => ({ default: m.QrPrintPage })));
 const QueuePage = lazy(() => import("@/features/connect/QueuePage").then((m) => ({ default: m.QueuePage })));
 const LogPage = lazy(() => import("@/features/connect/LogPage").then((m) => ({ default: m.LogPage })));
@@ -52,6 +53,10 @@ const AttendancePage = lazy(() => import("@/features/grow/AttendancePage").then(
 const AssessmentBuilderPage = lazy(() => import("@/features/grow/AssessmentBuilderPage").then((m) => ({ default: m.AssessmentBuilderPage })));
 const SubmissionsPage = lazy(() => import("@/features/grow/SubmissionsPage").then((m) => ({ default: m.SubmissionsPage })));
 const ReviewPage = lazy(() => import("@/features/grow/ReviewPage").then((m) => ({ default: m.ReviewPage })));
+const CertificatesPage = lazy(() => import("@/features/grow/CertificatesPage").then((m) => ({ default: m.CertificatesPage })));
+const DropOffPage = lazy(() => import("@/features/grow/DropOffPage").then((m) => ({ default: m.DropOffPage })));
+const ForumPage = lazy(() => import("@/features/grow/ForumPage").then((m) => ({ default: m.ForumPage })));
+const ThreadPage = lazy(() => import("@/features/grow/ThreadPage").then((m) => ({ default: m.ThreadPage })));
 const UiKitPage = lazy(() => import("@/features/dev/UiKitPage").then((m) => ({ default: m.UiKitPage })));
 
 const loading = <Skeleton className="mt-6 h-96 w-full rounded-3xl" />;
@@ -119,6 +124,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Landing /> },
       { path: "home", element: page("member.home", <MemberHomePage />) },
+      // Any signed-in staff member: their own signature for certificates.
+      { path: "account/signature", element: <Suspense fallback={loading}><SignaturePage /></Suspense> },
       { path: "dashboard", element: page("dashboard.view", <DashboardPage />) },
       {
         path: "admin",
@@ -174,9 +181,13 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: page("grow.view", <GrowIndex />) },
           { path: "classes", element: page("learn.view", <ClassesPage />) },
+          { path: "certificates", element: page("learn.view", <CertificatesPage />) },
+          { path: "drop-off", element: page("learn.all", <DropOffPage />) },
           { path: "classes/new", element: page("learn.manage", <ClassFormPage />) },
           { path: "classes/:id", element: page("learn.view", <ClassPage />) },
           { path: "classes/:id/edit", element: page("learn.manage", <ClassFormPage />) },
+          { path: "classes/:id/forum", element: page("learn.view", <ForumPage />) },
+          { path: "classes/:id/forum/:tid", element: page("learn.view", <ThreadPage />) },
           { path: "classes/:id/sessions/new", element: page("learn.author", <SessionEditorPage />) },
           { path: "classes/:id/sessions/:sid", element: page("learn.view", <SessionDetailPage />) },
           { path: "classes/:id/sessions/:sid/edit", element: page("learn.view", <SessionEditorPage />) },

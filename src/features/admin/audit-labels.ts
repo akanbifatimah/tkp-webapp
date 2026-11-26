@@ -5,9 +5,12 @@ export const ACTION_LABEL: Record<string, string> = {
   sign_in: "Signed in",
   sign_in_failed: "Failed sign-in",
   sign_out: "Signed out",
+  "account.signature.save": "Saved their signature",
+  "account.signature.remove": "Removed their signature",
   "password.change": "Changed their password",
   "mfa.code_sent": "Sign-in code sent",
   "mfa.failed": "Wrong sign-in code",
+  "mfa.device_remembered": "Remembered a device for 30 days",
   "welcome.search": "Searched guests",
   "welcome.view": "Opened a guest record",
   "welcome.entry.view": "Viewed a form entry",
@@ -82,6 +85,22 @@ export const ACTION_LABEL: Record<string, string> = {
   "learn.review.remind": "Sent an assessment reminder",
   "learn.review.excuse": "Excused someone from an assessment",
   "learn.review.unexcuse": "Took back an excusal",
+  "learn.certificate.issue": "Issued a certificate",
+  "learn.certificate.reissue": "Reissued a certificate",
+  "learn.certificate.revoke": "Revoked a certificate",
+  "learn.certificate.export": "Downloaded a certificate",
+  "learn.dropoff.export": "Copied a drop-off follow-up list",
+  "learn.forum.reply": "Posted pastoral guidance in a class forum",
+  "learn.forum.prompt": "Started a forum reflection prompt",
+  "learn.forum.edit": "Edited a forum prompt",
+  "learn.forum.pin": "Pinned a forum conversation",
+  "learn.forum.unpin": "Unpinned a forum conversation",
+  "learn.forum.lock": "Locked a forum conversation",
+  "learn.forum.unlock": "Unlocked a forum conversation",
+  "learn.forum.shepherd": "Marked a forum conversation shepherded",
+  "learn.forum.unshepherd": "Reopened a forum conversation for a pastor",
+  "learn.forum.hide": "Hid a forum post",
+  "learn.forum.restore": "Restored a hidden forum post",
   "connect.assign": "Assigned a guest",
   "connect.guest.view": "Opened a guest in Connect",
   "connect.log.save": "Saved a follow-up log",
@@ -100,7 +119,7 @@ export const actionLabel = (a: string) => ACTION_LABEL[a] ?? a;
 
 /** Tone for the action chip: red for failures and removals, gold for exports and admin changes. */
 export function actionTone(a: string): "crit" | "gold" | "maroon" | "neutral" {
-  if (["sign_in_failed", "mfa.failed", "user.deactivate", "user.sessions.revoke", "welcome.cellmap.remove", "welcome.service.delete", "welcome.service.retire", "welcome.qr.delete", "welcome.qr.pause", "welcome.duplicates.merge", "welcome.import.undo", "reports.schedule.delete", "reports.schedule.pause", "learn.course.archive", "learn.course.delete", "learn.session.delete", "learn.enrol.withdraw", "learn.resource.remove", "learn.assessment.delete", "learn.review.change"].includes(a)) return "crit";
+  if (["sign_in_failed", "mfa.failed", "user.deactivate", "user.sessions.revoke", "welcome.cellmap.remove", "welcome.service.delete", "welcome.service.retire", "welcome.qr.delete", "welcome.qr.pause", "welcome.duplicates.merge", "welcome.import.undo", "reports.schedule.delete", "reports.schedule.pause", "learn.course.archive", "learn.course.delete", "learn.session.delete", "learn.enrol.withdraw", "learn.resource.remove", "learn.assessment.delete", "learn.review.change", "learn.certificate.revoke", "learn.forum.hide"].includes(a)) return "crit";
   if (a.endsWith(".export") || a.startsWith("user.") || a.startsWith("settings.") || a.startsWith("welcome.cellmap.") || a.startsWith("welcome.service.") || a.startsWith("welcome.qr.") || a.startsWith("welcome.duplicates.") || a.startsWith("welcome.import.") || (a.startsWith("reports.") && a !== "reports.view") || a.startsWith("learn.")) return "gold";
   if (a.startsWith("sign_") || a.startsWith("mfa.") || a.startsWith("password.")) return "neutral";
   return "maroon";
@@ -163,6 +182,11 @@ export const FIELD_LABEL: Record<string, string> = {
   final: "Final assessment",
   outcome: "Outcome",
   shared: "Note shared",
+  serial: "Serial number",
+  list: "List",
+  thread: "Conversation",
+  pinned: "Pinned",
+  post: "Reply",
   fullName: "Name",
   email: "Email",
   phone: "Phone",

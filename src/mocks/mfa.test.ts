@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { db } from "./db";
 import { mockInbox } from "./inbox";
-import { MAX_ATTEMPTS, MAX_SENDS, RESEND_AFTER_MS, maskEmail, needsMfa, resendMfa, startMfa, verifyMfa } from "./mfa";
+import { MAX_ATTEMPTS, MAX_SENDS, RESEND_AFTER_MS, TRUST_DAYS, maskEmail, needsMfa, rememberDevice, resendMfa, startMfa, trustedDevice, verifyMfa } from "./mfa";
 
 /** PRD §2 rule 6 / A-2: a one-time code for every staff sign-in. */
 const user = (id: string) => db.staff.find((s) => s.id === id)!;
@@ -64,5 +64,40 @@ describe("MFA for staff", () => {
     u.isActive = false;
     expect(verifyMfa(c.ticket, code())).toMatchObject({ ok: false, code: "MFA_EXPIRED" });
     u.isActive = true;
+  });
+});
+
+describe("Remember this device for 30 days (TKP, 2026-11-26)", () => {
+  const DAY = 86_400_000;
+
+  it("a remembered device skips the code for 30 days, then asks again", () => {
+    const u = user("u18");
+    const now = Date.now();
+    const d = rememberDevice(u, "Edge on Windows", now);
+    expect(Date.parse(d.expiresAt) - now).toBe(TRUST_DAYS * DAY);
+    expect(db.audit[0]).toMatchObject({ action: "mfa.device_remembered", meta: { after: { device: "Edge on Windows", days: 30 } } });
+    expect(trustedDevice(u, d.token, now + 29 * DAY)?.label).toBe("Edge on Windows");
+    expect(trustedDevice(u, d.token, now + 30 * DAY)).toBeNull();
+  });
+
+  it("belongs to one person and one browser", () => {
+    const d = rememberDevice(user("u18"), "Chrome on Mac");
+    expect(trustedDevice(user("u23"), d.token)).toBeNull();
+    expect(trustedDevice(user("u18"), "a-guessed-token")).toBeNull();
+    expect(trustedDevice(user("u18"), undefined)).toBeNull();
+  });
+
+  it("a password change, reset, or sign-out everywhere forgets it", () => {
+    const u = user("u23");
+    const now = Date.now();
+    const d = rememberDevice(u, "Safari on iOS", now);
+    expect(trustedDevice(u, d.token, now + 1000)).not.toBeNull();
+    const keep = u.sessionsRevokedAt;
+    u.sessionsRevokedAt = now + 1; // what each of those three does
+    expect(trustedDevice(u, d.token, now + 2000)).toBeNull();
+    // Remembering it again after the change works.
+    const again = rememberDevice(u, "Safari on iOS", now + 5000);
+    expect(trustedDevice(u, again.token, now + 6000)).not.toBeNull();
+    u.sessionsRevokedAt = keep;
   });
 });

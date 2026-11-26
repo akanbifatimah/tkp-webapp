@@ -62,7 +62,7 @@ export function LookupPage() {
 
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
-      <PageHeader eyebrow="1 · Welcome" title="Guest lookup" tagline={WELCOME_TAGLINE} actions={<ConfidentialChip />} />
+      <PageHeader eyebrow="Welcome" title="Guest lookup" tagline={WELCOME_TAGLINE} actions={<ConfidentialChip />} />
 
       <motion.section variants={fadeUp} className="space-y-4 rounded-3xl border border-white bg-white p-5 shadow-card sm:p-6">
         <div className="grid gap-3 md:grid-cols-2">

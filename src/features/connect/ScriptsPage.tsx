@@ -26,7 +26,7 @@ export function ScriptsPage() {
 
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
-      <PageHeader eyebrow="2 · Connect" title="Scripts" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
+      <PageHeader eyebrow="Connect" title="Scripts" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
 
       <motion.div variants={fadeUp} className="flex flex-wrap gap-2" role="radiogroup" aria-label="Show scripts for">
         {FILTERS.map((f) => {

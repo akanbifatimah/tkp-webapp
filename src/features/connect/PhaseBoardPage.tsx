@@ -40,7 +40,7 @@ export function PhaseBoardPage() {
 
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
-      <PageHeader eyebrow="2 · Connect · 12 weeks at a glance" title="Phase board" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
+      <PageHeader eyebrow="Connect · 12 weeks at a glance" title="Phase board" tagline={CONNECT_TAGLINE} actions={<ConfidentialChip />} />
       <DraftNotice questions="Q12, Q13">
         Columns follow today’s phases (no Guest Track or Paused columns from the older mockup). Who sees the board, including the Church Office, is still to be confirmed.
       </DraftNotice>

@@ -226,8 +226,8 @@ export type PersonHit = { id: string; name: string; email: string; learner: bool
 
 export type GrowOverview = {
   term: { label: string; week: number };
-  tiles: { enrolled: number; waitlisted: number; running: number; sessionsThisWeek: number; joinedThisWeek: number };
-  attention: { id: string; kind: "unpublished" | "seats" | "draft" | "full" | "attendance" | "assessment" | "review"; title: string; detail: string; courseId: string; action: string; to?: string }[];
+  tiles: { enrolled: number; waitlisted: number; running: number; sessionsThisWeek: number; joinedThisWeek: number; awaitingCertificates: number };
+  attention: { id: string; kind: "unpublished" | "seats" | "draft" | "full" | "attendance" | "assessment" | "review" | "certificates" | "stalled" | "forum"; title: string; detail: string; courseId: string; action: string; to?: string }[];
   week: { courseId: string; sessionId: string; title: string; sessionTitle: string; at: string; where: string; enrolled: number; teachers: string[] }[];
   can: { manage: boolean };
 };
@@ -323,7 +323,7 @@ export type Assessment = AssessmentInput & {
 export type SessionDetail = {
   session: Session;
   course: { id: string; title: string; status: CourseStatus; teachers: Person[]; enrolled: number; format: CourseFormat; where: "online" | "in_person"; lengthMin: number };
-  stats: { attendanceRate: number | null; attended: number; marked: boolean; submissions: number | null; expected: number; videoWatch: number | null };
+  stats: { attendanceRate: number | null; attended: number; marked: boolean; submissions: number | null; expected: number; videoWatch: number | null; forumThreads: number };
   attendance: { state: AttendanceSheet["state"]; savedAt: string | null; savedBy: string | null; due: boolean } | null;
   assessments: { id: string; title: string; status: AssessmentStatus }[];
   can: { author: boolean; attendance: boolean };
@@ -399,3 +399,153 @@ export type SubmissionDetail = {
 };
 
 export type ReviewInput = { outcome: Outcome | null; note: string; shareNote: boolean; release: boolean; rowVer: number; reason?: string };
+
+/* ===================================================== M8 step 4: certificates */
+
+export type CertificateStatus = "valid" | "replaced" | "revoked";
+export const CERT_STATUS_LABEL: Record<CertificateStatus, string> = { valid: "Valid", replaced: "Replaced by a reissue", revoked: "Revoked" };
+
+/** Someone who meets the class's completion rules and has no certificate yet (Figma "Ready to issue"). */
+export type ReadyRow = {
+  enrolmentId: string;
+  name: string;
+  courseId: string;
+  courseTitle: string;
+  attended: number;
+  needed: number;
+  sessions: number;
+  /** "Reflection passed", "Assessments passed", "No assessment needed", "Excused from Class Reflection". */
+  assessment: string;
+  /** As the certificate will print them. */
+  step: number | null;
+  teacher: string | null;
+  pastor: string | null;
+  /** Saved signatures (image URLs). The teacher's only when the class has one teacher. */
+  teacherSignature: string | null;
+  pastorSignature: string | null;
+};
+
+/** People still working towards a certificate, and what's missing. */
+export type InProgressRow = { enrolmentId: string; name: string; courseId: string; courseTitle: string; missing: string[] };
+
+export type Certificate = {
+  id: string;
+  serial: string;
+  name: string;
+  courseId: string | null;
+  courseTitle: string;
+  step: number | null;
+  teacher: string | null;
+  pastor: string | null;
+  /** As issued (image URLs), or null. */
+  teacherSignature: string | null;
+  pastorSignature: string | null;
+  issuedAt: string;
+  issuedBy: string | null;
+  status: CertificateStatus;
+  /** Reissues: the serial this one replaced, or the one that replaced it. */
+  replaces: string | null;
+  replacedBy: string | null;
+  reason: string | null;
+  verifyUrl: string;
+};
+
+export type CertificatesResponse = {
+  ready: ReadyRow[];
+  inProgress: InProgressRow[];
+  issued: Certificate[];
+  can: { issue: boolean };
+};
+
+/** What the public verify page shows (PRD G-12, U17): name, course, date and status only. */
+export type CertificateCheck = { serial: string; name: string; course: string; issuedOn: string; status: CertificateStatus } | { serial: string; status: "unknown" };
+
+/* ===================================================== M8 step 4: drop-off report */
+
+export type DropOffPeriod = "12m" | "year" | "all";
+export const DROP_OFF_PERIOD_LABEL: Record<DropOffPeriod, string> = { "12m": "Last 12 months", year: "This year", all: "All time" };
+
+export type DropOffReport = {
+  period: DropOffPeriod;
+  from: number | null;
+  tracked: number;
+  /** `nextOffered`: someone has started the next step at some point (it runs). */
+  steps: { step: number; label: string; started: number; movedOn: number | null; rate: number | null; hidden: boolean; nextOffered: boolean }[];
+  /** The step with the biggest fall-off to the next one. */
+  insight: { from: string; to: string; movedOn: number; started: number } | null;
+  /** "Recommended pastoral contact lists" (Figma): names for personal follow-up. */
+  followUps: { id: string; title: string; detail: string; count: number; names: string[] }[];
+  can: { copy: boolean };
+};
+
+/* ============================================================ M8 step 5: forum */
+
+/** Figma 136:29952 filters: weekly reflections, prayer requests, study questions; plus testimonies. */
+export type ThreadKind = "reflection" | "prayer" | "question" | "testimony";
+export const THREAD_KIND_LABEL: Record<ThreadKind, string> = {
+  reflection: "Weekly reflection",
+  prayer: "Prayer request",
+  question: "Study question",
+  testimony: "Testimony",
+};
+
+export type ForumAuthor = { name: string; staff: boolean; role: string | null };
+export type Hidden = { by: string; reason: string; at: string } | null;
+
+export type ForumPost = {
+  id: string;
+  author: ForumAuthor;
+  body: string;
+  createdAt: string;
+  pastoral: boolean;
+  amens: number;
+  hidden: Hidden;
+};
+
+export type ThreadSummary = {
+  id: string;
+  kind: ThreadKind;
+  session: number | null;
+  title: string;
+  /** The opening post, shortened for the list. */
+  excerpt: string;
+  /** The whole opening post. */
+  body: string;
+  author: ForumAuthor;
+  createdAt: string;
+  lastActivityAt: string;
+  lastBy: string | null;
+  replies: number;
+  amens: number;
+  pinned: boolean;
+  locked: boolean;
+  hidden: Hidden;
+  needsPastor: boolean;
+  shepherdDone: { by: string; at: string } | null;
+  /** The latest pastoral reply, shown under the thread (Figma). */
+  pastoral: { by: string; body: string } | null;
+};
+
+export type ForumFilter = "all" | "pastor" | ThreadKind;
+export type ForumSort = "activity" | "newest" | "replies";
+
+export type ForumResponse = {
+  course: { id: string; title: string; enrolled: number; moderators: string[] };
+  stats: { threads: number; needsPastor: number; participation: number; participants: number };
+  counts: Record<ForumFilter, number>;
+  pinned: ThreadSummary | null;
+  items: ThreadSummary[];
+  page: number;
+  pageSize: number;
+  total: number;
+  can: { moderate: boolean; reply: boolean };
+};
+
+export type ThreadDetail = ThreadSummary & {
+  courseId: string;
+  courseTitle: string;
+  posts: ForumPost[];
+  can: { moderate: boolean; reply: boolean; editPrompt: boolean };
+};
+
+export type NewPromptInput = { title: string; body: string; session: number | null; pin: boolean };

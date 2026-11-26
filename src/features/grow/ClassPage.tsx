@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Lock,
   LockOpen,
+  MessagesSquare,
   Paperclip,
   Pencil,
   Plus,
@@ -75,7 +76,7 @@ export function ClassPage() {
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-6">
       <BackLink />
       <PageHeader
-        eyebrow={c.step ? `Step ${c.step} · ${stepLabel(c.step)}` : "4 · Grow"}
+        eyebrow={c.step ? `Step ${c.step} · ${stepLabel(c.step)}` : "Grow"}
         title={c.title}
         tagline={`${c.scheduleLabel}${c.term ? ` · ${c.term}` : ""} · ${c.teachers.map((t) => t.name).join(", ")}`}
         actions={<HeaderActions c={c} />}
@@ -170,7 +171,12 @@ function HeaderActions({ c }: { c: CourseDetail }) {
   const registration = useRegistration();
   const archive = useArchiveCourse();
   const remove = useDeleteCourse();
-  if (!c.can.manage) return null;
+  const forum = (
+    <Button variant="ghost" icon={<MessagesSquare className="size-4" />} onClick={() => void navigate(`/grow/classes/${c.id}/forum`)}>
+      Class forum
+    </Button>
+  );
+  if (!c.can.manage) return c.status === "draft" ? null : forum;
   const busy = registration.isPending || archive.isPending || remove.isPending;
   const finished = c.status === "completed" || c.status === "archived";
 
@@ -215,6 +221,7 @@ function HeaderActions({ c }: { c: CourseDetail }) {
   const archivable = c.status === "completed" || (c.status === "open" && c.enrolled + c.waitlisted === 0);
   return (
     <>
+      {c.status !== "draft" ? forum : null}
       {c.status !== "archived" ? (
         <Button variant="ghost" icon={<Pencil className="size-4" />} onClick={() => void navigate(`/grow/classes/${c.id}/edit`)} disabled={busy}>
           Edit class

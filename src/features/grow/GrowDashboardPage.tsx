@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, FilePen, Hourglass, MessageSquareHeart, Plus, Radio, UserCheck, UserRound, Users } from "lucide-react";
+import { ArrowRight, Award, BookOpen, HeartHandshake, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, FilePen, MessageSquareHeart, MessagesSquare, Plus, Radio, UserCheck, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
@@ -26,6 +26,9 @@ const ATTENTION_ICON: Record<GrowOverview["attention"][number]["kind"], React.Re
   attendance: <UserCheck />,
   assessment: <ClipboardList />,
   review: <MessageSquareHeart />,
+  certificates: <Award />,
+  stalled: <HeartHandshake />,
+  forum: <MessagesSquare />,
 };
 
 const dayFmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "long", month: "short", day: "numeric" });
@@ -40,7 +43,7 @@ export function GrowDashboardPage() {
   return (
     <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="space-y-7">
       <PageHeader
-        eyebrow="4 · Grow"
+        eyebrow="Grow"
         title={`${greeting()}${first ? `, ${first}` : ""}.`}
         tagline={d ? "Here's today across your classes." : undefined}
         actions={
@@ -72,7 +75,7 @@ export function GrowDashboardPage() {
             <Tile label="People enrolled" value={d.tiles.enrolled} icon={<UserRound />} accent="maroon" hint="In classes that haven't finished" />
             <Tile label="Joined live" value={d.tiles.joinedThisWeek} icon={<Radio />} accent="teal" hint="Live session joins in the last 7 days" />
             <Tile label="Classes in session" value={d.tiles.running} icon={<BookOpen />} accent="gold" hint="Between their first and last session" />
-            <Tile label="Waiting for a seat" value={d.tiles.waitlisted} icon={<Hourglass />} accent="rose" hint="On a class waitlist" />
+            <Tile label="Awaiting certificates" value={d.tiles.awaitingCertificates} icon={<Award />} accent="rose" hint={`${d.tiles.waitlisted} waiting for a seat`} />
           </div>
 
           <section aria-labelledby="attention-h">

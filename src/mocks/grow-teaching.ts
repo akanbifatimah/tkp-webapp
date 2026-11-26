@@ -82,6 +82,8 @@ export function attendanceSummary(c: CourseRecord, s: SessionRecord, now = Date.
 export function attendedCount(e: EnrolmentRecord): number {
   const c = findCourse(e.courseId);
   if (!c) return 0;
+  // Self-paced classes: a session counts once it's opened.
+  if (!hasMeetings(c.format)) return Math.min(e.opened, sessionsOf(c.id).filter((s) => s.state === "published").length);
   return sessionsOf(c.id).filter((s) => {
     const m = effective(c, s, e).mark;
     return m === "joined" || m === "recording";
@@ -410,6 +412,7 @@ export function getSessionDetail(
       submissions: mine.some((a) => a.state === "published") ? mine.reduce((n, a) => n + submissionsFor(a.id), 0) : null,
       expected: people.length,
       videoWatch: watches.length ? Math.round(watches.reduce((n, l) => n + l.percent, 0) / watches.length) : null,
+      forumThreads: db.forumThreads.filter((t) => t.courseId === c.id && t.session === s.number && !t.hidden).length,
     },
     attendance: summary ? { state: summary.state, savedAt: rec?.savedAt ?? null, savedBy: rec?.savedById ? staffPerson(rec.savedById).name : null, due: summary.due } : null,
     assessments: mine.map((a) => ({ id: a.id, title: a.title, status: assessmentStatus(c, a, now) })),

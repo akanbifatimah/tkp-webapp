@@ -1,5 +1,6 @@
 import type { LogRow } from "@/features/connect/types";
-import { seedGrow, type AssessmentRecord, type AttendanceRecord, type CourseRecord, type EnrolmentRecord, type ExcusalRecord, type JoinLog, type ReminderRecord, type SubmissionRecord, type LearnPerson, type SessionRecord } from "./seed/grow";
+import { seedGrow, type AssessmentRecord, type AttendanceRecord, type CertificateRecord, type CourseRecord, type EnrolmentRecord, type ExcusalRecord, type JoinLog, type ReminderRecord, type SubmissionRecord, type LearnPerson, type SessionRecord } from "./seed/grow";
+import { seedForum, type PostRecord, type ThreadRecord } from "./seed/forum";
 import { seedAttendance, type AttendanceRow } from "./seed/attendance";
 import { seedAudit } from "./seed/audit";
 import { addDuplicates } from "./seed/duplicates";
@@ -57,11 +58,25 @@ export type SettingsRecord = {
   updatedById: string | null;
 };
 
+/**
+ * Mock only: remembered devices survive a page reload (the rest of the mock data
+ * resets), so "Remember this device" can be tried. A real backend keeps them in its database.
+ */
+export const TRUSTED_DEVICES_STORE = "tkp.mock.trustedDevices";
+function loadTrustedDevices(): import("./mfa").TrustedDevice[] {
+  try {
+    return typeof localStorage === "undefined" ? [] : (JSON.parse(localStorage.getItem(TRUSTED_DEVICES_STORE) ?? "[]") as import("./mfa").TrustedDevice[]);
+  } catch {
+    return [];
+  }
+}
+
 // The five fictional duplicate cases go in before anything reads the guests.
 const seeded = addDuplicates(seedConnect());
 const qr = seedQr();
 const reports = seedReports();
 const grow = seedGrow();
+const forum = seedForum(grow.enrolments);
 const staff = STAFF.map((s) => ({ ...s, roles: [...s.roles] })) as StaffRecord[];
 
 export const db = {
@@ -84,6 +99,8 @@ export const db = {
   enforceTempPassword: true,
   /** PRD §2 rule 6 / A-2: MFA is mandatory for staff. Not a setting. */
   mfaForStaff: true,
+  /** Browsers that skip the sign-in code for 30 days ("Remember this device"). */
+  trustedDevices: loadTrustedDevices(),
   /** One Connect journey per person (TKP Connect itg.Connect). */
   connect: seeded.records as ConnectRecord[],
   /** Saved logs, newest first (itg.ConnectLog). */
@@ -128,6 +145,11 @@ export const db = {
   learnSubmissions: grow.submissions as SubmissionRecord[],
   learnExcusals: grow.excusals as ExcusalRecord[],
   learnReminders: grow.reminders as ReminderRecord[],
+  /** Issued certificates: never deleted (PRD LMS-9). */
+  learnCertificates: grow.certificates as CertificateRecord[],
+  /** The cohort forum (M8 step 5). */
+  forumThreads: forum.threads as ThreadRecord[],
+  forumPosts: forum.posts as PostRecord[],
 };
 
 /** Every sign-in, search, guest view, assignment, save and admin change is audited (FI-09, PRD F-5). */

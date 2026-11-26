@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, type IssueCertificateBody } from "@/lib/api";
+import type { DropOffPeriod, ForumFilter, ForumSort, NewPromptInput } from "./grow-types";
 import type { AssessmentInput, AttendanceInput, CourseInput, ReviewInput, SessionInput, Upload } from "./grow-types";
 
 /** TanStack Query hooks for Grow (docs/API.md §13). */
@@ -16,7 +17,19 @@ export const growKeys = {
   assessment: (id: string) => ["learn", "assessment", id] as const,
   submissions: (id: string) => ["learn", "submissions", id] as const,
   submission: (id: string) => ["learn", "submission", id] as const,
+  certificates: ["learn", "certificates"] as const,
+  dropOff: (p: string) => ["learn", "drop-off", p] as const,
+  forum: (id: string, q: object) => ["learn", "forum", id, q] as const,
+  thread: (id: string) => ["learn", "thread", id] as const,
 };
+
+export const useForum = (courseId: string, q: { filter: ForumFilter; q: string; sort: ForumSort; page: number }) =>
+  useQuery({ queryKey: growKeys.forum(courseId, q), queryFn: ({ signal }) => api.learn.forum(courseId, q, signal), placeholderData: (prev) => prev });
+export const useThread = (id: string) => useQuery({ queryKey: growKeys.thread(id), queryFn: ({ signal }) => api.learn.thread(id, signal) });
+
+export const useCertificates = () => useQuery({ queryKey: growKeys.certificates, queryFn: ({ signal }) => api.learn.certificates(signal) });
+export const useDropOff = (period: DropOffPeriod) =>
+  useQuery({ queryKey: growKeys.dropOff(period), queryFn: ({ signal }) => api.learn.dropOff(period, signal), placeholderData: (prev) => prev });
 
 export const useSubmissions = (assessmentId: string) => useQuery({ queryKey: growKeys.submissions(assessmentId), queryFn: ({ signal }) => api.learn.submissions(assessmentId, signal) });
 export const useSubmission = (id: string) => useQuery({ queryKey: growKeys.submission(id), queryFn: ({ signal }) => api.learn.submission(id, signal) });
@@ -79,3 +92,11 @@ export const useDeleteAssessment = () => useGrowMutation((id: string) => api.lea
 export const useReview = () => useGrowMutation((v: { id: string; body: ReviewInput }) => api.learn.review(v.id, v.body));
 export const useRemind = () => useGrowMutation((assessmentId: string) => api.learn.remind(assessmentId));
 export const useExcuse = () => useGrowMutation((v: { assessmentId: string; enrolmentId: string; reason: string | null }) => api.learn.excuse(v.assessmentId, v.enrolmentId, v.reason));
+export const useIssueCertificate = () => useGrowMutation(({ enrolmentId, ...body }: { enrolmentId: string } & IssueCertificateBody) => api.learn.issueCertificate(enrolmentId, body));
+export const useReissueCertificate = () => useGrowMutation((v: { id: string; reason: string; name: string }) => api.learn.reissueCertificate(v.id, { reason: v.reason, name: v.name }));
+export const useRevokeCertificate = () => useGrowMutation((v: { id: string; reason: string }) => api.learn.revokeCertificate(v.id, v.reason));
+export const useReplyToThread = () => useGrowMutation((v: { id: string; body: string }) => api.learn.replyToThread(v.id, v.body));
+export const useCreatePrompt = () => useGrowMutation((v: { courseId: string; body: NewPromptInput }) => api.learn.createPrompt(v.courseId, v.body));
+export const useEditPrompt = () => useGrowMutation((v: { id: string; title: string; body: string }) => api.learn.editPrompt(v.id, { title: v.title, body: v.body }));
+export const useThreadFlag = () => useGrowMutation((v: { id: string; flag: "pinned" | "locked" | "shepherdDone"; on: boolean }) => api.learn.setThreadFlag(v.id, v.flag, v.on));
+export const useSetHidden = () => useGrowMutation((v: { kind: "threads" | "posts"; id: string; reason: string | null }) => api.learn.setHidden(v.kind, v.id, v.reason));

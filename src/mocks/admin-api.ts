@@ -133,6 +133,7 @@ export function createUser(u: StaffRecord, input: Partial<UserInput>): Result<Te
     createdAt: new Date().toISOString(),
     lastSignInAt: null,
     rowVer: 1,
+    signature: null,
   };
   db.staff.push(rec);
   audit(u.id, "user.create", id, { after: { fullName: rec.fullName, email: rec.email, roles: rec.roles, connectTeam: rec.connectTeam } });
